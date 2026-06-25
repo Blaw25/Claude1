@@ -244,6 +244,7 @@
     renderDashboard();
     renderTransactions();
     renderCalendar();
+    renderTrends();
     renderBudgets();
     renderRecurring();
     populateCategorySelects();
@@ -416,6 +417,34 @@
     return x;
   }
 
+  // Totals across a byDate map (used for calendar period summaries).
+  function summarize(byDate) {
+    let income = 0,
+      expense = 0,
+      investment = 0;
+    Object.values(byDate).forEach((list) =>
+      list.forEach((it) => {
+        if (it.type === "income") income += it.amount;
+        else if (it.type === "investment") investment += it.amount;
+        else expense += it.amount;
+      })
+    );
+    return { income, expense, investment, net: income - expense - investment };
+  }
+
+  function calSummaryHtml(s) {
+    return (
+      `<span class="cs-item">Income <b class="amount-income">${fmt(s.income)}</b></span>` +
+      `<span class="cs-item">Expenses <b class="amount-expense">${fmt(s.expense)}</b></span>` +
+      (s.investment > 0
+        ? `<span class="cs-item">Invested <b class="amount-investment">${fmt(s.investment)}</b></span>`
+        : "") +
+      `<span class="cs-item">Net <b class="${
+        s.net >= 0 ? "amount-income" : "amount-expense"
+      }">${fmt(s.net)}</b></span>`
+    );
+  }
+
   function renderCalendar() {
     if (calMode === "week") renderWeek();
     else renderMonth();
@@ -431,6 +460,7 @@
     $("#calendar-label").textContent = monthLabel(key);
     const [y, m] = key.split("-").map(Number);
     const byDate = calendarItemsBetween(new Date(y, m - 1, 1), new Date(y, m, 0));
+    $("#calendar-summary").innerHTML = calSummaryHtml(summarize(byDate));
     const startWeekday = new Date(y, m - 1, 1).getDay();
     const daysInMonth = new Date(y, m, 0).getDate();
     const today = todayStr();
@@ -478,6 +508,7 @@
     $("#calendar-label").textContent = `${formatDateFull(start)} – ${formatDateFull(end)}`;
 
     const byDate = calendarItemsBetween(start, end);
+    $("#calendar-summary").innerHTML = calSummaryHtml(summarize(byDate));
     const today = todayStr();
 
     $("#calendar-week").innerHTML = days
@@ -553,6 +584,157 @@
           }">${net >= 0 ? "+" : "-"}${fmt(Math.abs(net))}</span></div>`
         : "");
     openModal("day-modal");
+  }
+
+  // ---- Trends ---------------------------------------------------------------
+
+  function continuousMonths(startK, endK) {
+    const out = [];
+    let [y, m] = startK.split("-").map(Number);
+    const [ey, em] = endK.split("-").map(Number);
+    while (y < ey || (y === ey && m <= em)) {
+      out.push(`${y}-${String(m).padStart(2, "0")}`);
+      m++;
+      if (m > 12) {
+        m = 1;
+        y++;
+      }
+      if (out.length > 600) break;
+    }
+    return out;
+  }
+
+  function shortMonthLabel(key) {
+    const [y, m] = key.split("-").map(Number);
+    const mon = new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "short" });
+    return m === 1 ? `${mon} '${String(y).slice(2)}` : mon;
+  }
+
+  function renderTrends() {
+    const range = parseInt($("#trend-range").value, 10);
+    const buckets = {};
+    state.transactions.forEach((t) => {
+      const k = monthKey(t.date);
+      const b = buckets[k] || (buckets[k] = { income: 0, expense: 0, investment: 0 });
+      if (t.type === "income") b.income += t.amount;
+      else if (t.type === "investment") b.investment += t.amount;
+      else b.expense += t.amount;
+    });
+
+    const present = Object.keys(buckets).sort();
+    const chart = $("#trend-chart");
+    const summary = $("#trend-summary");
+    if (!present.length) {
+      chart.innerHTML = `<div class="empty-state">No data yet. Add transactions to see trends.</div>`;
+      summary.innerHTML = "";
+      return;
+    }
+
+    let months = continuousMonths(present[0], present[present.length - 1]);
+    if (range > 0 && months.length > range) months = months.slice(-range);
+
+    const data = months.map((k) => {
+      const b = buckets[k] || { income: 0, expense: 0, investment: 0 };
+      return { k, ...b, net: b.income - b.expense - b.investment };
+    });
+
+    // Period totals
+    const tot = data.reduce(
+      (a, d) => ({
+        income: a.income + d.income,
+        expense: a.expense + d.expense,
+        investment: a.investment + d.investment,
+      }),
+      { income: 0, expense: 0, investment: 0 }
+    );
+    const net = tot.income - tot.expense - tot.investment;
+    const avgSavings = tot.income > 0 ? Math.round(((tot.income - tot.expense) / tot.income) * 100) : 0;
+    summary.innerHTML = `
+      <div class="card stat"><div class="stat-label">Total Income</div><div class="stat-value income">${fmt(tot.income)}</div></div>
+      <div class="card stat"><div class="stat-label">Total Expenses</div><div class="stat-value expense">${fmt(tot.expense)}</div></div>
+      <div class="card stat"><div class="stat-label">Total Invested</div><div class="stat-value investment">${fmt(tot.investment)}</div></div>
+      <div class="card stat"><div class="stat-label">Net</div><div class="stat-value ${net >= 0 ? "income" : "expense"}">${fmt(net)}</div></div>
+      <div class="card stat"><div class="stat-label">Avg Savings Rate</div><div class="stat-value">${avgSavings}%</div></div>`;
+
+    chart.innerHTML = buildTrendSvg(data);
+  }
+
+  function buildTrendSvg(data) {
+    const n = data.length;
+    const groupW = 72;
+    const w = Math.max(n * groupW + 50, 560);
+    const h = 300;
+    const padL = 52,
+      padR = 14,
+      padT = 16,
+      padB = 52;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+
+    const maxVal = Math.max(1, ...data.flatMap((d) => [d.income, d.expense, d.investment, d.net]));
+    const minVal = Math.min(0, ...data.map((d) => d.net));
+    const span = maxVal - minVal || 1;
+    const yToPx = (v) => padT + plotH * (1 - (v - minVal) / span);
+    const zeroY = yToPx(0);
+    const groupInner = plotW / n;
+    const bw = Math.min(13, groupInner / 4.5);
+
+    // gridlines / axis labels at 0, max, and (if present) min
+    const ticks = [0, maxVal];
+    if (minVal < 0) ticks.push(minVal);
+    const gridlines = ticks
+      .map((v) => {
+        const y = yToPx(v);
+        const cls = v === 0 ? "trend-zero" : "trend-grid";
+        return `<line class="${cls}" x1="${padL}" y1="${y}" x2="${w - padR}" y2="${y}" />
+          <text class="trend-axis-label" x="${padL - 6}" y="${y + 3}" text-anchor="end">${fmtShort(
+          v
+        )}</text>`;
+      })
+      .join("");
+
+    let bars = "";
+    let netPts = [];
+    data.forEach((d, i) => {
+      const center = padL + groupInner * (i + 0.5);
+      const x0 = center - 1.5 * bw;
+      const series = [
+        ["income", d.income],
+        ["expense", d.expense],
+        ["investment", d.investment],
+      ];
+      series.forEach(([cls, val], j) => {
+        if (val <= 0) return;
+        const top = yToPx(val);
+        const x = x0 + j * bw;
+        bars += `<rect class="trend-bar ${cls}" x="${x}" y="${top}" width="${
+          bw - 1.5
+        }" height="${Math.max(0, zeroY - top)}" rx="1.5"><title>${shortMonthLabel(d.k)} ${cls}: ${fmt(
+          val
+        )}</title></rect>`;
+      });
+      netPts.push([center, yToPx(d.net)]);
+      bars += `<text class="trend-month-label" x="${center}" y="${h - padB + 18}" text-anchor="middle">${shortMonthLabel(
+        d.k
+      )}</text>`;
+    });
+
+    const netLine =
+      netPts.length > 1
+        ? `<polyline class="trend-net-line" points="${netPts.map((p) => p.join(",")).join(" ")}" />`
+        : "";
+    const netDots = netPts
+      .map(
+        ([x, y], i) =>
+          `<circle class="trend-net-dot" cx="${x}" cy="${y}" r="3"><title>${shortMonthLabel(
+            data[i].k
+          )} net: ${fmt(data[i].net)}</title></circle>`
+      )
+      .join("");
+
+    return `<svg class="trend-chart-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Monthly trends chart">
+      ${gridlines}${bars}${netLine}${netDots}
+    </svg>`;
   }
 
   function renderCategoryChart(tx) {
@@ -900,6 +1082,7 @@
         renderCalendar();
       })
     );
+    $("#trend-range").addEventListener("change", renderTrends);
     $("#day-add-btn").addEventListener("click", () => {
       const date = dayModalDate;
       closeModal("day-modal");

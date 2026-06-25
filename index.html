@@ -24,6 +24,9 @@
         <button class="nav-item" data-view="calendar">
           <span class="nav-icon">📅</span> Calendar
         </button>
+        <button class="nav-item" data-view="trends">
+          <span class="nav-icon">📈</span> Trends
+        </button>
         <button class="nav-item" data-view="budgets">
           <span class="nav-icon">🎯</span> Budgets
         </button>
@@ -153,9 +156,39 @@
           <span class="legend-item"><span class="legend-dot recur">🔁</span> Recurring</span>
           <span class="legend-item"><span class="legend-chip projected"></span> Upcoming (projected)</span>
         </div>
+        <div class="cal-summary" id="calendar-summary"></div>
         <div class="card">
           <div class="cal-grid" id="calendar-grid"></div>
           <div class="cal-week" id="calendar-week" hidden></div>
+        </div>
+      </section>
+
+      <!-- TRENDS -->
+      <section class="view" id="view-trends">
+        <header class="view-header">
+          <h1>Trends</h1>
+          <label class="trend-range-label">
+            <span>Range</span>
+            <select id="trend-range">
+              <option value="6">Last 6 months</option>
+              <option value="12" selected>Last 12 months</option>
+              <option value="24">Last 24 months</option>
+              <option value="0">All time</option>
+            </select>
+          </label>
+        </header>
+        <p class="view-sub">Income, expenses, and investments by month, with your net each month. Based on recorded transactions.</p>
+        <div class="cards" id="trend-summary"></div>
+        <div class="card">
+          <div class="cal-legend">
+            <span class="legend-item"><span class="legend-dot income"></span> Income</span>
+            <span class="legend-item"><span class="legend-dot expense"></span> Expense</span>
+            <span class="legend-item"><span class="legend-dot investment"></span> Investment</span>
+            <span class="legend-item"><span class="legend-line net"></span> Net</span>
+          </div>
+          <div class="trend-scroll">
+            <div id="trend-chart"></div>
+          </div>
         </div>
       </section>
 
