@@ -13,16 +13,17 @@
       <div class="brand">
         <span class="brand-mark">💰</span>
         <span class="brand-name">Budget</span>
+        <button class="menu-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false">☰</button>
       </div>
       <nav class="nav">
-        <button class="nav-item active" data-view="dashboard">
+        <button class="nav-item active" data-view="calendar">
+          <span class="nav-icon">📅</span> Calendar
+        </button>
+        <button class="nav-item" data-view="dashboard">
           <span class="nav-icon">📊</span> Dashboard
         </button>
         <button class="nav-item" data-view="transactions">
           <span class="nav-icon">💳</span> Transactions
-        </button>
-        <button class="nav-item" data-view="calendar">
-          <span class="nav-icon">📅</span> Calendar
         </button>
         <button class="nav-item" data-view="trends">
           <span class="nav-icon">📈</span> Trends
@@ -47,7 +48,7 @@
 
     <main class="main">
       <!-- DASHBOARD -->
-      <section class="view active" id="view-dashboard">
+      <section class="view" id="view-dashboard">
         <header class="view-header">
           <h1>Dashboard</h1>
           <p class="view-sub" id="dashboard-period-label"></p>
@@ -135,7 +136,7 @@
       </section>
 
       <!-- CALENDAR -->
-      <section class="view" id="view-calendar">
+      <section class="view active" id="view-calendar">
         <header class="view-header">
           <h1>Calendar</h1>
           <div class="cal-nav">

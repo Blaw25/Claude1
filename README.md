@@ -17,6 +17,8 @@ A clean, dependency-free personal budgeting app that runs entirely in your brows
 - **Your data, your control** — everything is stored locally in your browser. Export to JSON (full backup) or CSV (for spreadsheets), and import a JSON backup anytime.
 - **Sample data** — one click loads realistic example data so you can explore before entering your own.
 
+The app opens on the **Calendar** as its home screen. On phones the navigation collapses into a **☰ menu** in the top bar that opens the full list of tabs (and the period picker); on wider screens the full sidebar is always visible.
+
 ## Usage
 
 No installation required. Just open `index.html` in any modern browser:

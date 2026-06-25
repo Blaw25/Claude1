@@ -53,6 +53,18 @@ body {
   padding: 6px 8px 20px;
 }
 .brand-mark { font-size: 24px; }
+.menu-toggle {
+  display: none;
+  margin-left: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  padding: 6px 12px;
+  border-radius: 9px;
+  cursor: pointer;
+}
 
 .nav { display: flex; flex-direction: column; gap: 4px; flex: 1; }
 .nav-item {
@@ -393,9 +405,26 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
 /* Responsive */
 @media (max-width: 860px) {
   .app { grid-template-columns: 1fr; }
-  .sidebar { position: static; height: auto; flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .nav { flex-direction: row; flex-wrap: wrap; flex: 1 1 100%; }
-  .sidebar-footer { border: none; padding: 0; }
+  /* Sidebar becomes a sticky top bar with a hamburger-opened drawer */
+  .sidebar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    height: auto;
+    flex-direction: column;
+    padding: 10px 16px;
+  }
+  .brand { padding: 0; width: 100%; }
+  .menu-toggle { display: block; }
+  .nav { display: none; width: 100%; margin-top: 10px; gap: 2px; }
+  .sidebar-footer { display: none; width: 100%; border: none; padding: 0; }
+  .sidebar.open .nav { display: flex; flex-direction: column; }
+  .sidebar.open .sidebar-footer {
+    display: block;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+  }
   .panel-grid { grid-template-columns: 1fr; }
   .main { padding: 20px; }
   /* Let headers wrap so the calendar nav doesn't push the page wide */

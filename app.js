@@ -1041,6 +1041,15 @@
       renderAll();
     });
 
+    // mobile drawer toggle
+    const sidebar = $(".sidebar");
+    const menuToggle = $("#menu-toggle");
+    const setMenu = (open) => {
+      sidebar.classList.toggle("open", open);
+      menuToggle.setAttribute("aria-expanded", open ? "true" : "false");
+    };
+    menuToggle.addEventListener("click", () => setMenu(!sidebar.classList.contains("open")));
+
     // nav
     $$(".nav-item").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -1048,6 +1057,8 @@
         $$(".view").forEach((v) => v.classList.remove("active"));
         btn.classList.add("active");
         $("#view-" + btn.dataset.view).classList.add("active");
+        setMenu(false); // collapse the drawer after choosing a tab on mobile
+        window.scrollTo(0, 0);
       });
     });
 
