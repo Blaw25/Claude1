@@ -27,6 +27,7 @@
     { name: "Entertainment", budget: 120, color: "#f43f5e" },
     { name: "Health", budget: 100, color: "#10b981" },
     { name: "Other", budget: 0, color: "#94a3b8" },
+    { name: "Investments", budget: 0, color: "#60a5fa", type: "investment" },
   ];
 
   // ---- State ----------------------------------------------------------------
@@ -92,6 +93,11 @@
     return state.categories.find((c) => c.id === id);
   }
 
+  // Categories created before the type field existed are expenses.
+  function catType(c) {
+    return c && c.type ? c.type : "expense";
+  }
+
   function monthLabel(key) {
     const [y, m] = key.split("-");
     return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, {
@@ -129,11 +135,15 @@
 
     const income = tx.filter((t) => t.type === "income").reduce((s, t) => s + t.amount, 0);
     const expenses = tx.filter((t) => t.type === "expense").reduce((s, t) => s + t.amount, 0);
-    const net = income - expenses;
-    const savings = income > 0 ? Math.round((net / income) * 100) : 0;
+    const invested = tx.filter((t) => t.type === "investment").reduce((s, t) => s + t.amount, 0);
+    // Net is the cash left over after both spending and investing.
+    const net = income - expenses - invested;
+    // Savings rate counts everything not spent (leftover cash + invested).
+    const savings = income > 0 ? Math.round(((income - expenses) / income) * 100) : 0;
 
     $("#stat-income").textContent = fmt(income);
     $("#stat-expenses").textContent = fmt(expenses);
+    $("#stat-invested").textContent = fmt(invested);
     const netEl = $("#stat-net");
     netEl.textContent = fmt(net);
     netEl.className = "stat-value " + (net >= 0 ? "income" : "expense");
@@ -175,7 +185,7 @@
 
   function renderBudgetStatus(tx) {
     const list = $("#budget-status-list");
-    const budgeted = state.categories.filter((c) => c.budget > 0 && c.type !== "income");
+    const budgeted = state.categories.filter((c) => c.budget > 0 && catType(c) === "expense");
     if (!budgeted.length) {
       list.innerHTML = `<div class="empty-state">No budgets set. Add limits on the Budgets tab.</div>`;
       return;
@@ -216,7 +226,12 @@
   function txRowHtml(t, withActions = true) {
     const cat = categoryById(t.categoryId);
     const sign = t.type === "income" ? "+" : "-";
-    const amtCls = t.type === "income" ? "amount-income" : "amount-expense";
+    const amtCls =
+      t.type === "income"
+        ? "amount-income"
+        : t.type === "investment"
+        ? "amount-investment"
+        : "amount-expense";
     return `<tr>
       <td>${formatDate(t.date)}</td>
       <td>${escapeHtml(t.description)}</td>
@@ -261,8 +276,10 @@
     const tx = txForMonth(key);
     const spendByCat = {};
     const incomeByCat = {};
+    const investByCat = {};
+    const buckets = { expense: spendByCat, income: incomeByCat, investment: investByCat };
     tx.forEach((t) => {
-      const bucket = t.type === "expense" ? spendByCat : incomeByCat;
+      const bucket = buckets[t.type] || spendByCat;
       bucket[t.categoryId] = (bucket[t.categoryId] || 0) + t.amount;
     });
 
@@ -281,10 +298,16 @@
               <button class="icon-btn" data-del-cat="${c.id}" title="Delete">🗑️</button>
             </div>
           </div>`;
-        if (c.type === "income") {
+        if (catType(c) === "income") {
           const received = incomeByCat[c.id] || 0;
           return `<div class="budget-card">${head}
             <div class="spent"><span>${fmt(received)} received</span><span>Income</span></div>
+          </div>`;
+        }
+        if (catType(c) === "investment") {
+          const contributed = investByCat[c.id] || 0;
+          return `<div class="budget-card">${head}
+            <div class="spent"><span>${fmt(contributed)} invested</span><span>Investment</span></div>
           </div>`;
         }
         return `<div class="budget-card">
@@ -307,11 +330,9 @@
     const filterCat = $("#tx-category-filter");
     const selectedType = ($("input[name='tx-type']:checked") || {}).value || "expense";
 
-    // Transaction modal: show categories matching the chosen type (income-typed
-    // categories for income, the rest for expenses).
-    const relevant = state.categories.filter((c) =>
-      selectedType === "income" ? c.type === "income" : c.type !== "income"
-    );
+    // Transaction modal: show only categories whose type matches the chosen
+    // transaction type (expense / income / investment).
+    const relevant = state.categories.filter((c) => catType(c) === selectedType);
     const prev = txCat.value;
     txCat.innerHTML = relevant
       .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
@@ -366,7 +387,7 @@
   function openCatModal(cat) {
     $("#cat-modal-title").textContent = cat ? "Edit Category" : "Add Category";
     $("#cat-id").value = cat ? cat.id : "";
-    const type = cat && cat.type === "income" ? "income" : "expense";
+    const type = cat ? catType(cat) : "expense";
     $(`input[name='cat-type'][value='${type}']`).checked = true;
     $("#cat-name").value = cat ? cat.name : "";
     $("#cat-budget").value = cat ? cat.budget : 0;
@@ -376,10 +397,11 @@
     $("#cat-name").focus();
   }
 
-  // Budgets only apply to spending, so hide the limit field for income.
+  // Budgets only apply to spending, so hide the limit field for
+  // income and investment categories.
   function updateCatBudgetVisibility() {
     const type = ($("input[name='cat-type']:checked") || {}).value || "expense";
-    $("#cat-budget-field").style.display = type === "income" ? "none" : "";
+    $("#cat-budget-field").style.display = type === "expense" ? "" : "none";
   }
 
   // ---- Event wiring ---------------------------------------------------------
@@ -482,7 +504,7 @@
       const type = $("input[name='cat-type']:checked").value;
       const data = {
         name: $("#cat-name").value.trim(),
-        budget: type === "income" ? 0 : parseFloat($("#cat-budget").value) || 0,
+        budget: type === "expense" ? parseFloat($("#cat-budget").value) || 0 : 0,
         color: $("#cat-color").value,
         type,
       };
@@ -635,6 +657,8 @@
       ["income", 350, "Freelance project", "Salary", 18],
       ["expense", 74.2, "Groceries", "Groceries", 20],
       ["expense", 28.5, "Movie night", "Entertainment", 22],
+      ["investment", 500, "401(k) contribution", "Investments", 1],
+      ["investment", 200, "Index fund", "Investments", 15],
     ];
     state.transactions = samples.map(([type, amount, description, cat, d]) => ({
       id: uid("tx"),
