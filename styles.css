@@ -124,6 +124,24 @@ body {
 .chart-bar-fill { height: 100%; border-radius: 6px; }
 .chart-amount { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* Upcoming this week */
+.upcoming-card { border-color: var(--warn); margin-bottom: 16px; }
+.upcoming-card h2 { display: flex; align-items: center; gap: 8px; }
+.up-total { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--text-dim); }
+.upcoming-row {
+  display: grid;
+  grid-template-columns: 14px 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.upcoming-row:last-child { border-bottom: none; }
+.up-when { color: var(--text-dim); font-size: 13px; text-align: right; white-space: nowrap; }
+.up-amt { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.up-soon { color: var(--warn); font-weight: 600; }
+
 /* Budget status */
 .budget-status-list { display: flex; flex-direction: column; gap: 14px; }
 .budget-status-item .bs-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }

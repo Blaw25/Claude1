@@ -289,6 +289,55 @@
     renderCategoryChart(tx);
     renderBudgetStatus(tx);
     renderRecent(tx);
+    renderUpcoming();
+  }
+
+  // Recurring items due within the next 7 days. Hidden when nothing is due.
+  function renderUpcoming() {
+    const card = $("#upcoming-card");
+    const list = $("#upcoming-list");
+    const totalEl = $("#upcoming-total");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const horizon = new Date(today);
+    horizon.setDate(horizon.getDate() + 7);
+
+    const items = (state.recurring || [])
+      .map((r) => ({ r, due: nextDue(r) }))
+      .filter((x) => x.due > today && x.due <= horizon)
+      .sort((a, b) => a.due - b.due);
+
+    if (!items.length) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+
+    let outflow = 0;
+    list.innerHTML = items
+      .map(({ r, due }) => {
+        const cat = categoryById(r.categoryId);
+        const sign = r.type === "income" ? "+" : "-";
+        const amtCls =
+          r.type === "income"
+            ? "amount-income"
+            : r.type === "investment"
+            ? "amount-investment"
+            : "amount-expense";
+        if (r.type !== "income") outflow += r.amount;
+        const days = Math.round((due - today) / 86400000);
+        const rel = days === 1 ? "Tomorrow" : `in ${days} days`;
+        const soon = days <= 2 ? "up-soon" : "";
+        return `<div class="upcoming-row">
+          <span class="cat-dot" style="background:${cat ? cat.color : "#94a3b8"}"></span>
+          <span>${escapeHtml(r.description)}</span>
+          <span class="up-when ${soon}">${rel} · ${formatDateFull(due)}</span>
+          <span class="up-amt ${amtCls}">${sign}${fmt(r.amount)}</span>
+        </div>`;
+      })
+      .join("");
+
+    totalEl.textContent = outflow > 0 ? `${fmt(outflow)} due` : "";
   }
 
   function renderCategoryChart(tx) {
