@@ -34,6 +34,12 @@
 
   let state = loadState();
 
+  // Calendar UI state (not persisted)
+  let calMode = "month"; // "month" | "week"
+  let calWeekRef = new Date();
+  calWeekRef.setHours(0, 0, 0, 0);
+  let dayModalDate = null; // date the day-detail modal is currently showing
+
   function makeDefaultState() {
     return {
       currency: "USD",
@@ -359,20 +365,21 @@
     return currencySymbol() + Math.round(amount).toLocaleString();
   }
 
-  // Map of date -> entries for a month, merging real transactions with
-  // projected future recurring occurrences (those after today).
-  function calendarItemsForMonth(key) {
-    const [y, m] = key.split("-").map(Number);
-    const monthStart = new Date(y, m - 1, 1);
-    const monthEnd = new Date(y, m, 0);
+  const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  // Map of date -> entries within [start, end] (Date objects), merging real
+  // transactions with projected future recurring occurrences (after today).
+  function calendarItemsBetween(start, end) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const startS = fmtDateObj(start);
+    const endS = fmtDateObj(end);
 
     const byDate = {};
     const push = (ds, item) => (byDate[ds] = byDate[ds] || []).push(item);
 
     state.transactions.forEach((t) => {
-      if (monthKey(t.date) === key) {
+      if (t.date >= startS && t.date <= endS) {
         push(t.date, {
           type: t.type,
           amount: t.amount,
@@ -385,7 +392,7 @@
     });
 
     (state.recurring || []).forEach((r) => {
-      occurrencesInRange(r, monthStart, monthEnd).forEach((ds) => {
+      occurrencesInRange(r, start, end).forEach((ds) => {
         if (parseDate(ds) > today) {
           push(ds, {
             type: r.type,
@@ -402,11 +409,28 @@
     return byDate;
   }
 
+  function startOfWeek(d) {
+    const x = new Date(d);
+    x.setHours(0, 0, 0, 0);
+    x.setDate(x.getDate() - x.getDay()); // back to Sunday
+    return x;
+  }
+
   function renderCalendar() {
+    if (calMode === "week") renderWeek();
+    else renderMonth();
+    $("#calendar-grid").hidden = calMode !== "month";
+    $("#calendar-week").hidden = calMode !== "week";
+    $$("[data-cal-mode]").forEach((b) =>
+      b.classList.toggle("active", b.dataset.calMode === calMode)
+    );
+  }
+
+  function renderMonth() {
     const key = currentMonth();
     $("#calendar-label").textContent = monthLabel(key);
     const [y, m] = key.split("-").map(Number);
-    const byDate = calendarItemsForMonth(key);
+    const byDate = calendarItemsBetween(new Date(y, m - 1, 1), new Date(y, m, 0));
     const startWeekday = new Date(y, m - 1, 1).getDay();
     const daysInMonth = new Date(y, m, 0).getDate();
     const today = todayStr();
@@ -431,23 +455,70 @@
       const more = items.length > 3 ? `<span class="cal-more">+${items.length - 3} more</span>` : "";
       cells.push(`<div class="cal-cell${ds === today ? " today" : ""}${
         items.length ? " has-items" : ""
-      }"${items.length ? ` data-cal-date="${ds}"` : ""}>
+      }" data-cal-date="${ds}">
         <div class="cal-day">${day}</div>
         <div class="cal-chips">${chips}${more}</div>
       </div>`);
     }
     while (cells.length % 7 !== 0) cells.push(`<div class="cal-cell empty"></div>`);
 
-    const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-      .map((d) => `<div class="cal-weekday">${d}</div>`)
-      .join("");
+    const weekdays = WEEKDAYS.map((d) => `<div class="cal-weekday">${d}</div>`).join("");
     $("#calendar-grid").innerHTML = weekdays + cells.join("");
   }
 
+  function renderWeek() {
+    const start = startOfWeek(calWeekRef);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start);
+      d.setDate(start.getDate() + i);
+      days.push(d);
+    }
+    const end = days[6];
+    $("#calendar-label").textContent = `${formatDateFull(start)} – ${formatDateFull(end)}`;
+
+    const byDate = calendarItemsBetween(start, end);
+    const today = todayStr();
+
+    $("#calendar-week").innerHTML = days
+      .map((d) => {
+        const ds = fmtDateObj(d);
+        const items = byDate[ds] || [];
+        const head = `${WEEKDAYS[d.getDay()]} ${d.getDate()}`;
+        const entries = items.length
+          ? items
+              .map((it) => {
+                const cls =
+                  it.type === "income"
+                    ? "income"
+                    : it.type === "investment"
+                    ? "investment"
+                    : "expense";
+                const sign = it.type === "income" ? "+" : "-";
+                const cat = categoryById(it.categoryId);
+                return `<div class="week-entry ${cls}${it.projected ? " projected" : ""}">
+                  <span class="cat-dot" style="background:${cat ? cat.color : "#94a3b8"}"></span>
+                  <span class="we-desc">${it.recurring ? "🔁 " : ""}${escapeHtml(
+                  it.description
+                )}</span>
+                  <span class="we-amt">${sign}${fmtShort(it.amount)}</span>
+                </div>`;
+              })
+              .join("")
+          : `<div class="week-empty">—</div>`;
+        return `<div class="week-day${ds === today ? " today" : ""}" data-cal-date="${ds}">
+          <div class="week-day-head">${head}</div>
+          <div class="week-entries">${entries}</div>
+        </div>`;
+      })
+      .join("");
+  }
+
   function openDayModal(ds) {
-    const items = calendarItemsForMonth(monthKey(ds))[ds] || [];
-    const dateObj = parseDate(ds);
-    $("#day-modal-title").textContent = formatDateFull(dateObj);
+    dayModalDate = ds;
+    const dayObj = parseDate(ds);
+    const items = calendarItemsBetween(dayObj, dayObj)[ds] || [];
+    $("#day-modal-title").textContent = formatDateFull(dayObj);
 
     let net = 0;
     const rows = items
@@ -714,14 +785,14 @@
     $("#" + id).hidden = true;
   }
 
-  function openTxModal(tx) {
+  function openTxModal(tx, presetDate) {
     $("#tx-modal-title").textContent = tx ? "Edit Transaction" : "Add Transaction";
     $("#tx-id").value = tx ? tx.id : "";
     const type = tx ? tx.type : "expense";
     $(`input[name='tx-type'][value='${type}']`).checked = true;
     $("#tx-amount").value = tx ? tx.amount : "";
     $("#tx-description").value = tx ? tx.description : "";
-    $("#tx-date").value = tx ? tx.date : new Date().toISOString().slice(0, 10);
+    $("#tx-date").value = tx ? tx.date : presetDate || new Date().toISOString().slice(0, 10);
     populateCategorySelects();
     if (tx) $("#tx-category").value = tx.categoryId;
     openModal("tx-modal");
@@ -800,18 +871,39 @@
 
     $("#month-filter").addEventListener("change", renderAll);
 
-    // calendar month navigation
+    // calendar navigation (month or week depending on mode)
     const shiftMonth = (delta) => {
       const [y, m] = currentMonth().split("-").map(Number);
       const d = new Date(y, m - 1 + delta, 1);
       $("#month-filter").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       renderAll();
     };
-    $("#cal-prev").addEventListener("click", () => shiftMonth(-1));
-    $("#cal-next").addEventListener("click", () => shiftMonth(1));
+    const shiftWeek = (delta) => {
+      calWeekRef.setDate(calWeekRef.getDate() + delta * 7);
+      renderCalendar();
+    };
+    $("#cal-prev").addEventListener("click", () => (calMode === "week" ? shiftWeek(-1) : shiftMonth(-1)));
+    $("#cal-next").addEventListener("click", () => (calMode === "week" ? shiftWeek(1) : shiftMonth(1)));
     $("#cal-today").addEventListener("click", () => {
-      $("#month-filter").value = new Date().toISOString().slice(0, 7);
-      renderAll();
+      if (calMode === "week") {
+        calWeekRef = new Date();
+        calWeekRef.setHours(0, 0, 0, 0);
+        renderCalendar();
+      } else {
+        $("#month-filter").value = new Date().toISOString().slice(0, 7);
+        renderAll();
+      }
+    });
+    $$("[data-cal-mode]").forEach((b) =>
+      b.addEventListener("click", () => {
+        calMode = b.dataset.calMode;
+        renderCalendar();
+      })
+    );
+    $("#day-add-btn").addEventListener("click", () => {
+      const date = dayModalDate;
+      closeModal("day-modal");
+      openTxModal(null, date);
     });
 
     // transaction filters

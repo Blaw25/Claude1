@@ -180,6 +180,9 @@ body {
 .cal-nav { display: flex; align-items: center; gap: 8px; }
 .cal-nav .btn { padding: 8px 12px; }
 .cal-label { font-weight: 600; min-width: 140px; text-align: center; }
+.cal-mode { display: inline-flex; border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.cal-mode button { background: var(--surface-2); border: none; color: var(--text-dim); padding: 8px 12px; cursor: pointer; font-size: 13px; font-family: inherit; }
+.cal-mode button.active { background: var(--primary); color: #fff; }
 .cal-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; font-size: 13px; color: var(--text-dim); }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
@@ -190,6 +193,8 @@ body {
 .legend-chip.projected { width: 16px; height: 10px; border: 1px dashed var(--text-dim); border-radius: 3px; display: inline-block; }
 
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+/* hidden attribute must beat the display rules below (same as modals) */
+.cal-grid[hidden], .cal-week[hidden] { display: none; }
 .cal-weekday { text-align: center; font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 4px; }
 .cal-cell {
   min-height: 92px;
@@ -203,8 +208,8 @@ body {
   overflow: hidden;
 }
 .cal-cell.empty { border: none; background: transparent; }
-.cal-cell.has-items { cursor: pointer; }
-.cal-cell.has-items:hover { border-color: var(--primary); }
+.cal-cell[data-cal-date] { cursor: pointer; }
+.cal-cell[data-cal-date]:hover { border-color: var(--primary); }
 .cal-cell.today { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
 .cal-day { font-size: 13px; color: var(--text-dim); font-weight: 600; }
 .cal-cell.today .cal-day { color: var(--primary); }
@@ -224,6 +229,27 @@ body {
 .cal-chip.investment { background: rgba(96, 165, 250, 0.16); color: var(--investment); }
 .cal-chip.projected { background: transparent; border-style: dashed; border-color: currentColor; opacity: 0.85; }
 .cal-more { font-size: 11px; color: var(--text-dim); }
+
+/* Week view */
+.cal-week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.week-day { border: 1px solid var(--border); border-radius: 8px; padding: 8px; min-height: 130px; min-width: 0; cursor: pointer; }
+.week-day:hover { border-color: var(--primary); }
+.week-day.today { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.week-day-head { font-size: 13px; font-weight: 600; color: var(--text-dim); margin-bottom: 8px; }
+.week-day.today .week-day-head { color: var(--primary); }
+.week-entries { display: flex; flex-direction: column; gap: 5px; }
+.week-entry { display: grid; grid-template-columns: 10px 1fr auto; gap: 6px; align-items: center; font-size: 12px; }
+.we-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.we-amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.week-entry.income .we-amt { color: var(--income); }
+.week-entry.expense .we-amt { color: var(--expense); }
+.week-entry.investment .we-amt { color: var(--investment); }
+.week-entry.projected { opacity: 0.78; }
+.week-empty { color: var(--text-dim); font-size: 12px; }
+@media (max-width: 600px) {
+  .cal-week { grid-template-columns: 1fr; }
+  .week-day { min-height: auto; }
+}
 
 /* Day detail modal */
 .day-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
