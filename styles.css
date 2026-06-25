@@ -90,7 +90,7 @@ body {
 .month-picker input { width: 100%; }
 
 /* Main */
-.main { padding: 28px 32px; max-width: 1100px; }
+.main { padding: 28px 32px; max-width: 1100px; min-width: 0; }
 
 .view { display: none; }
 .view.active { display: block; animation: fade 0.2s ease; }
@@ -164,8 +164,12 @@ body {
 
 /* Tables */
 .toolbar { display: flex; gap: 10px; margin: 16px 0; flex-wrap: wrap; }
-.toolbar input, .toolbar select { flex: 0 1 auto; }
+.toolbar input, .toolbar select { flex: 0 1 auto; min-width: 0; }
 .toolbar #tx-search { flex: 1 1 220px; }
+
+/* Keep wide tables inside their card instead of pushing the page wide */
+.table-scroll { overflow-x: auto; }
+#recent-transactions { overflow-x: auto; }
 
 .tx-table { width: 100%; border-collapse: collapse; }
 .tx-table th, .tx-table td { padding: 12px 10px; text-align: left; border-bottom: 1px solid var(--border); }
@@ -302,6 +306,28 @@ body {
   .cal-chip.investment { background: var(--investment); }
   .cal-chip.projected { background: transparent; }
   .cal-more { font-size: 10px; }
+
+  /* Transactions: search on its own row, the two filters share the next */
+  .toolbar #tx-search { flex: 1 1 100%; }
+  .toolbar select { flex: 1 1 calc(50% - 5px); }
+
+  /* Stack each transaction into a compact card so it fits without scrolling */
+  .tx-table, .tx-table tbody { display: block; }
+  .tx-table thead { display: none; }
+  .tx-table tr {
+    display: grid;
+    grid-template-columns: 1fr auto auto;
+    column-gap: 10px;
+    row-gap: 2px;
+    padding: 12px 2px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tx-table td { display: block; border: none; padding: 0; }
+  .td-date { grid-column: 1; grid-row: 1; font-size: 12px; color: var(--text-dim); }
+  .td-desc { grid-column: 1; grid-row: 2; font-weight: 500; }
+  .td-cat { grid-column: 1; grid-row: 3; }
+  .td-amt { grid-column: 2; grid-row: 1 / span 3; align-self: center; font-size: 15px; }
+  .td-act { grid-column: 3; grid-row: 1 / span 3; align-self: center; }
 }
 
 /* Budgets list */
@@ -413,6 +439,7 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
     height: auto;
     flex-direction: column;
     padding: 10px 16px;
+    min-width: 0;
   }
   .brand { padding: 0; width: 100%; }
   .menu-toggle { display: block; }

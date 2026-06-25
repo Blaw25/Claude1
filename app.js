@@ -816,15 +816,15 @@
         ? "amount-investment"
         : "amount-expense";
     return `<tr>
-      <td>${formatDate(t.date)}</td>
-      <td>${escapeHtml(t.description)}${
+      <td class="td-date">${formatDate(t.date)}</td>
+      <td class="td-desc">${escapeHtml(t.description)}${
         t.recurringId ? `<span class="recur-badge" title="From a recurring item">🔁</span>` : ""
       }</td>
-      <td>${cat ? `<span class="cat-pill"><span class="cat-dot" style="background:${cat.color}"></span>${escapeHtml(cat.name)}</span>` : "—"}</td>
-      <td class="num ${amtCls}">${sign}${fmt(t.amount)}</td>
+      <td class="td-cat">${cat ? `<span class="cat-pill"><span class="cat-dot" style="background:${cat.color}"></span>${escapeHtml(cat.name)}</span>` : "—"}</td>
+      <td class="num td-amt ${amtCls}">${sign}${fmt(t.amount)}</td>
       ${
         withActions
-          ? `<td><div class="row-actions">
+          ? `<td class="td-act"><div class="row-actions">
                <button class="icon-btn" data-edit-tx="${t.id}" title="Edit">✏️</button>
                <button class="icon-btn" data-del-tx="${t.id}" title="Delete">🗑️</button>
              </div></td>`
