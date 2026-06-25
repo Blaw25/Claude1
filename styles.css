@@ -176,6 +176,75 @@ body {
 
 .empty-state { text-align: center; color: var(--text-dim); padding: 40px 0; }
 
+/* Calendar */
+.cal-nav { display: flex; align-items: center; gap: 8px; }
+.cal-nav .btn { padding: 8px 12px; }
+.cal-label { font-weight: 600; min-width: 140px; text-align: center; }
+.cal-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 14px 0; font-size: 13px; color: var(--text-dim); }
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.legend-dot.income { background: var(--income); }
+.legend-dot.expense { background: var(--expense); }
+.legend-dot.investment { background: var(--investment); }
+.legend-dot.recur { background: none; font-size: 12px; }
+.legend-chip.projected { width: 16px; height: 10px; border: 1px dashed var(--text-dim); border-radius: 3px; display: inline-block; }
+
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-weekday { text-align: center; font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; padding-bottom: 4px; }
+.cal-cell {
+  min-height: 92px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+.cal-cell.empty { border: none; background: transparent; }
+.cal-cell.has-items { cursor: pointer; }
+.cal-cell.has-items:hover { border-color: var(--primary); }
+.cal-cell.today { border-color: var(--primary); box-shadow: inset 0 0 0 1px var(--primary); }
+.cal-day { font-size: 13px; color: var(--text-dim); font-weight: 600; }
+.cal-cell.today .cal-day { color: var(--primary); }
+.cal-chips { display: flex; flex-direction: column; gap: 3px; }
+.cal-chip {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid transparent;
+}
+.cal-chip.income { background: rgba(52, 211, 153, 0.16); color: var(--income); }
+.cal-chip.expense { background: rgba(248, 113, 113, 0.16); color: var(--expense); }
+.cal-chip.investment { background: rgba(96, 165, 250, 0.16); color: var(--investment); }
+.cal-chip.projected { background: transparent; border-style: dashed; border-color: currentColor; opacity: 0.85; }
+.cal-more { font-size: 11px; color: var(--text-dim); }
+
+/* Day detail modal */
+.day-row { display: grid; grid-template-columns: 14px 1fr auto; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+.day-row:last-of-type { border-bottom: none; }
+.day-sub { font-size: 12px; color: var(--text-dim); }
+.day-total { display: flex; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); font-weight: 600; }
+.tag { font-size: 11px; color: var(--text-dim); border: 1px solid var(--border); border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+
+@media (max-width: 600px) {
+  .cal-grid { gap: 3px; }
+  .cal-cell { min-height: 56px; padding: 4px; }
+  /* Collapse chips into compact dots to fit narrow screens */
+  .cal-chips { flex-direction: row; flex-wrap: wrap; gap: 3px; }
+  .cal-chip { font-size: 0; padding: 0; width: 8px; height: 8px; border-radius: 50%; }
+  .cal-chip.income { background: var(--income); }
+  .cal-chip.expense { background: var(--expense); }
+  .cal-chip.investment { background: var(--investment); }
+  .cal-chip.projected { background: transparent; }
+  .cal-more { font-size: 10px; }
+}
+
 /* Budgets list */
 .budgets-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; }
 .budget-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
@@ -282,4 +351,8 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
   .sidebar-footer { border: none; padding: 0; }
   .panel-grid { grid-template-columns: 1fr; }
   .main { padding: 20px; }
+  /* Let headers wrap so the calendar nav doesn't push the page wide */
+  .view-header { flex-wrap: wrap; gap: 10px; }
+  .cal-nav { flex-wrap: wrap; }
+  .cal-label { min-width: auto; }
 }

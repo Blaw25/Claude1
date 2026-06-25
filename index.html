@@ -21,6 +21,9 @@
         <button class="nav-item" data-view="transactions">
           <span class="nav-icon">💳</span> Transactions
         </button>
+        <button class="nav-item" data-view="calendar">
+          <span class="nav-icon">📅</span> Calendar
+        </button>
         <button class="nav-item" data-view="budgets">
           <span class="nav-icon">🎯</span> Budgets
         </button>
@@ -125,6 +128,29 @@
             <tbody id="tx-tbody"></tbody>
           </table>
           <div class="empty-state" id="tx-empty" hidden>No transactions for this period yet.</div>
+        </div>
+      </section>
+
+      <!-- CALENDAR -->
+      <section class="view" id="view-calendar">
+        <header class="view-header">
+          <h1>Calendar</h1>
+          <div class="cal-nav">
+            <button class="btn" id="cal-prev" title="Previous month">‹</button>
+            <span class="cal-label" id="calendar-label"></span>
+            <button class="btn" id="cal-next" title="Next month">›</button>
+            <button class="btn" id="cal-today">Today</button>
+          </div>
+        </header>
+        <div class="cal-legend">
+          <span class="legend-item"><span class="legend-dot income"></span> Income</span>
+          <span class="legend-item"><span class="legend-dot expense"></span> Expense</span>
+          <span class="legend-item"><span class="legend-dot investment"></span> Investment</span>
+          <span class="legend-item"><span class="legend-dot recur">🔁</span> Recurring</span>
+          <span class="legend-item"><span class="legend-chip projected"></span> Upcoming (projected)</span>
+        </div>
+        <div class="card">
+          <div class="cal-grid" id="calendar-grid"></div>
         </div>
       </section>
 
@@ -301,6 +327,17 @@
           <button type="submit" class="btn primary">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- Day detail modal -->
+  <div class="modal-backdrop" id="day-modal" hidden>
+    <div class="modal">
+      <h2 id="day-modal-title">Day</h2>
+      <div id="day-modal-body"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" data-close-modal>Close</button>
+      </div>
     </div>
   </div>
 

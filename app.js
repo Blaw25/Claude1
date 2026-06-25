@@ -150,6 +150,19 @@
     });
   }
 
+  // All occurrence dates of a rule within [start, end] (Date objects).
+  function occurrencesInRange(r, start, end) {
+    const out = [];
+    let dt = parseDate(r.startDate);
+    let guard = 0;
+    while (dt <= end && guard < 6000) {
+      if (dt >= start) out.push(fmtDateObj(dt));
+      dt = addInterval(dt, r.interval, r.unit);
+      guard++;
+    }
+    return out;
+  }
+
   // The next occurrence strictly after today.
   function nextDue(r) {
     const today = new Date();
@@ -224,6 +237,7 @@
   function renderAll() {
     renderDashboard();
     renderTransactions();
+    renderCalendar();
     renderBudgets();
     renderRecurring();
     populateCategorySelects();
@@ -338,6 +352,136 @@
       .join("");
 
     totalEl.textContent = outflow > 0 ? `${fmt(outflow)} due` : "";
+  }
+
+  // Compact amount for calendar chips (no decimals to save space).
+  function fmtShort(amount) {
+    return currencySymbol() + Math.round(amount).toLocaleString();
+  }
+
+  // Map of date -> entries for a month, merging real transactions with
+  // projected future recurring occurrences (those after today).
+  function calendarItemsForMonth(key) {
+    const [y, m] = key.split("-").map(Number);
+    const monthStart = new Date(y, m - 1, 1);
+    const monthEnd = new Date(y, m, 0);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const byDate = {};
+    const push = (ds, item) => (byDate[ds] = byDate[ds] || []).push(item);
+
+    state.transactions.forEach((t) => {
+      if (monthKey(t.date) === key) {
+        push(t.date, {
+          type: t.type,
+          amount: t.amount,
+          description: t.description,
+          categoryId: t.categoryId,
+          recurring: !!t.recurringId,
+          projected: false,
+        });
+      }
+    });
+
+    (state.recurring || []).forEach((r) => {
+      occurrencesInRange(r, monthStart, monthEnd).forEach((ds) => {
+        if (parseDate(ds) > today) {
+          push(ds, {
+            type: r.type,
+            amount: r.amount,
+            description: r.description,
+            categoryId: r.categoryId,
+            recurring: true,
+            projected: true,
+          });
+        }
+      });
+    });
+
+    return byDate;
+  }
+
+  function renderCalendar() {
+    const key = currentMonth();
+    $("#calendar-label").textContent = monthLabel(key);
+    const [y, m] = key.split("-").map(Number);
+    const byDate = calendarItemsForMonth(key);
+    const startWeekday = new Date(y, m - 1, 1).getDay();
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const today = todayStr();
+
+    const cells = [];
+    for (let i = 0; i < startWeekday; i++) cells.push(`<div class="cal-cell empty"></div>`);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const ds = `${key}-${String(day).padStart(2, "0")}`;
+      const items = byDate[ds] || [];
+      const chips = items
+        .slice(0, 3)
+        .map((it) => {
+          const cls =
+            it.type === "income" ? "income" : it.type === "investment" ? "investment" : "expense";
+          const sign = it.type === "income" ? "+" : "-";
+          return `<span class="cal-chip ${cls}${it.projected ? " projected" : ""}">${
+            it.recurring ? "🔁" : ""
+          }${sign}${fmtShort(it.amount)}</span>`;
+        })
+        .join("");
+      const more = items.length > 3 ? `<span class="cal-more">+${items.length - 3} more</span>` : "";
+      cells.push(`<div class="cal-cell${ds === today ? " today" : ""}${
+        items.length ? " has-items" : ""
+      }"${items.length ? ` data-cal-date="${ds}"` : ""}>
+        <div class="cal-day">${day}</div>
+        <div class="cal-chips">${chips}${more}</div>
+      </div>`);
+    }
+    while (cells.length % 7 !== 0) cells.push(`<div class="cal-cell empty"></div>`);
+
+    const weekdays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+      .map((d) => `<div class="cal-weekday">${d}</div>`)
+      .join("");
+    $("#calendar-grid").innerHTML = weekdays + cells.join("");
+  }
+
+  function openDayModal(ds) {
+    const items = calendarItemsForMonth(monthKey(ds))[ds] || [];
+    const dateObj = parseDate(ds);
+    $("#day-modal-title").textContent = formatDateFull(dateObj);
+
+    let net = 0;
+    const rows = items
+      .map((it) => {
+        const cat = categoryById(it.categoryId);
+        const sign = it.type === "income" ? "+" : "-";
+        const amtCls =
+          it.type === "income"
+            ? "amount-income"
+            : it.type === "investment"
+            ? "amount-investment"
+            : "amount-expense";
+        net += it.type === "income" ? it.amount : -it.amount;
+        const tags =
+          (it.recurring ? `<span class="tag">🔁 recurring</span>` : "") +
+          (it.projected ? `<span class="tag">upcoming</span>` : "");
+        return `<div class="day-row">
+          <span class="cat-dot" style="background:${cat ? cat.color : "#94a3b8"}"></span>
+          <span>${escapeHtml(it.description)}${tags}<div class="day-sub">${
+          cat ? escapeHtml(cat.name) : "Uncategorized"
+        }</div></span>
+          <span class="${amtCls}">${sign}${fmt(it.amount)}</span>
+        </div>`;
+      })
+      .join("");
+
+    $("#day-modal-body").innerHTML =
+      (rows || `<div class="empty-state">No entries.</div>`) +
+      (items.length
+        ? `<div class="day-total"><span>Net</span><span class="${
+            net >= 0 ? "amount-income" : "amount-expense"
+          }">${net >= 0 ? "+" : "-"}${fmt(Math.abs(net))}</span></div>`
+        : "");
+    openModal("day-modal");
   }
 
   function renderCategoryChart(tx) {
@@ -656,6 +800,20 @@
 
     $("#month-filter").addEventListener("change", renderAll);
 
+    // calendar month navigation
+    const shiftMonth = (delta) => {
+      const [y, m] = currentMonth().split("-").map(Number);
+      const d = new Date(y, m - 1 + delta, 1);
+      $("#month-filter").value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      renderAll();
+    };
+    $("#cal-prev").addEventListener("click", () => shiftMonth(-1));
+    $("#cal-next").addEventListener("click", () => shiftMonth(1));
+    $("#cal-today").addEventListener("click", () => {
+      $("#month-filter").value = new Date().toISOString().slice(0, 7);
+      renderAll();
+    });
+
     // transaction filters
     $("#tx-search").addEventListener("input", renderTransactions);
     $("#tx-type-filter").addEventListener("change", renderTransactions);
@@ -686,6 +844,7 @@
       closeModal("tx-modal");
       closeModal("cat-modal");
       closeModal("rec-modal");
+      closeModal("day-modal");
     };
 
     // modal close buttons + backdrop click
@@ -800,6 +959,7 @@
       const delCat = e.target.closest("[data-del-cat]");
       const editRec = e.target.closest("[data-edit-rec]");
       const delRec = e.target.closest("[data-del-rec]");
+      const calDay = e.target.closest("[data-cal-date]");
 
       if (editTx) {
         const t = state.transactions.find((x) => x.id === editTx.dataset.editTx);
@@ -842,6 +1002,8 @@
           renderAll();
           toast("Recurring item deleted.");
         }
+      } else if (calDay) {
+        openDayModal(calDay.dataset.calDate);
       }
     });
 
