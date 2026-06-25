@@ -198,6 +198,9 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
   z-index: 50;
   padding: 20px;
 }
+/* The hidden attribute must win over the display rule above, or the
+   modals stay visible on load and Cancel appears to do nothing. */
+.modal-backdrop[hidden] { display: none; }
 .modal {
   background: var(--surface);
   border: 1px solid var(--border);
