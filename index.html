@@ -198,11 +198,15 @@
       <h2 id="cat-modal-title">Add Category</h2>
       <form id="cat-form">
         <input type="hidden" id="cat-id" />
+        <div class="type-toggle">
+          <label><input type="radio" name="cat-type" value="expense" checked /> <span>Expense</span></label>
+          <label><input type="radio" name="cat-type" value="income" /> <span>Income</span></label>
+        </div>
         <label class="field">
           <span>Name</span>
           <input type="text" id="cat-name" required placeholder="e.g. Dining Out" />
         </label>
-        <label class="field">
+        <label class="field" id="cat-budget-field">
           <span>Monthly budget (0 for no limit)</span>
           <input type="number" id="cat-budget" step="0.01" min="0" value="0" />
         </label>

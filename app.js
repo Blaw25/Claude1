@@ -260,8 +260,10 @@
     const key = currentMonth();
     const tx = txForMonth(key);
     const spendByCat = {};
-    tx.filter((t) => t.type === "expense").forEach((t) => {
-      spendByCat[t.categoryId] = (spendByCat[t.categoryId] || 0) + t.amount;
+    const incomeByCat = {};
+    tx.forEach((t) => {
+      const bucket = t.type === "expense" ? spendByCat : incomeByCat;
+      bucket[t.categoryId] = (bucket[t.categoryId] || 0) + t.amount;
     });
 
     const list = $("#budgets-list");
@@ -272,14 +274,21 @@
         const pct = hasBudget ? Math.min((spent / c.budget) * 100, 100) : 0;
         const cls = spent > c.budget ? "over" : spent > c.budget * 0.85 ? "warn" : "";
         const remaining = c.budget - spent;
-        return `<div class="budget-card">
-          <div class="budget-card-head">
+        const head = `<div class="budget-card-head">
             <div class="budget-card-title"><span class="cat-dot" style="background:${c.color}"></span>${escapeHtml(c.name)}</div>
             <div class="row-actions">
               <button class="icon-btn" data-edit-cat="${c.id}" title="Edit">✏️</button>
               <button class="icon-btn" data-del-cat="${c.id}" title="Delete">🗑️</button>
             </div>
-          </div>
+          </div>`;
+        if (c.type === "income") {
+          const received = incomeByCat[c.id] || 0;
+          return `<div class="budget-card">${head}
+            <div class="spent"><span>${fmt(received)} received</span><span>Income</span></div>
+          </div>`;
+        }
+        return `<div class="budget-card">
+          ${head}
           ${
             hasBudget
               ? `<div class="bs-track"><div class="bs-fill ${cls}" style="width:${pct}%"></div></div>
@@ -357,11 +366,20 @@
   function openCatModal(cat) {
     $("#cat-modal-title").textContent = cat ? "Edit Category" : "Add Category";
     $("#cat-id").value = cat ? cat.id : "";
+    const type = cat && cat.type === "income" ? "income" : "expense";
+    $(`input[name='cat-type'][value='${type}']`).checked = true;
     $("#cat-name").value = cat ? cat.name : "";
     $("#cat-budget").value = cat ? cat.budget : 0;
     $("#cat-color").value = cat ? cat.color : "#6366f1";
+    updateCatBudgetVisibility();
     openModal("cat-modal");
     $("#cat-name").focus();
+  }
+
+  // Budgets only apply to spending, so hide the limit field for income.
+  function updateCatBudgetVisibility() {
+    const type = ($("input[name='cat-type']:checked") || {}).value || "expense";
+    $("#cat-budget-field").style.display = type === "income" ? "none" : "";
   }
 
   // ---- Event wiring ---------------------------------------------------------
@@ -406,6 +424,11 @@
     // type toggle re-populates category list
     $$("input[name='tx-type']").forEach((r) =>
       r.addEventListener("change", populateCategorySelects)
+    );
+
+    // category type toggle hides the budget field for income categories
+    $$("input[name='cat-type']").forEach((r) =>
+      r.addEventListener("change", updateCatBudgetVisibility)
     );
 
     // modal close buttons + backdrop click
@@ -456,10 +479,12 @@
     $("#cat-form").addEventListener("submit", (e) => {
       e.preventDefault();
       const id = $("#cat-id").value;
+      const type = $("input[name='cat-type']:checked").value;
       const data = {
         name: $("#cat-name").value.trim(),
-        budget: parseFloat($("#cat-budget").value) || 0,
+        budget: type === "income" ? 0 : parseFloat($("#cat-budget").value) || 0,
         color: $("#cat-color").value,
+        type,
       };
       if (!data.name) return toast("Category needs a name.");
       if (id) {
