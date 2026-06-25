@@ -7,6 +7,7 @@ A clean, dependency-free personal budgeting app that runs entirely in your brows
 - **Dashboard** — income, expenses, amount invested, net, and savings rate at a glance, plus a spending-by-category breakdown and live budget status.
 - **Transactions** — add, edit, and delete income, expense, and investment entries. Search and filter by type or category.
 - **Investments** — track money moved into investments separately from spending, so it doesn't distort your expense totals or budgets (it's saving, not consumption).
+- **Recurring items** — set up fixed expenses (rent, subscriptions), recurring income (salary), or automatic contributions that repeat **weekly**, **monthly**, or on a **custom** schedule (every N days/weeks/months). The app automatically creates the transactions up to today and shows when each item is next due. Recurring-generated transactions are marked with a 🔁 in the list.
 - **Budgets** — set a monthly spending limit per category and watch progress bars turn amber, then red, as you approach and exceed each limit.
 - **Monthly periods** — pick any month to view that period's transactions, totals, and budget progress.
 - **Categories** — fully customizable with names, colors, and budget limits.

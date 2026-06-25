@@ -39,6 +39,7 @@
       currency: "USD",
       categories: DEFAULT_CATEGORIES.map((c, i) => ({ id: "cat-" + (i + 1), ...c })),
       transactions: [],
+      recurring: [],
     };
   }
 
@@ -50,6 +51,7 @@
       // basic shape guard
       if (!parsed.categories || !parsed.transactions) return makeDefaultState();
       parsed.currency = parsed.currency || "USD";
+      parsed.recurring = parsed.recurring || [];
       return parsed;
     } catch {
       return makeDefaultState();
@@ -98,6 +100,104 @@
     return c && c.type ? c.type : "expense";
   }
 
+  // ---- Dates & recurrence ---------------------------------------------------
+
+  function todayStr() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+      d.getDate()
+    ).padStart(2, "0")}`;
+  }
+
+  function parseDate(s) {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(y, m - 1, d);
+  }
+
+  function fmtDateObj(dt) {
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(
+      dt.getDate()
+    ).padStart(2, "0")}`;
+  }
+
+  // Advance a date by interval units, clamping to month length for months
+  // (e.g. Jan 31 + 1 month -> Feb 28).
+  function addInterval(dt, interval, unit) {
+    const y = dt.getFullYear(),
+      m = dt.getMonth(),
+      d = dt.getDate();
+    if (unit === "days") return new Date(y, m, d + interval);
+    if (unit === "weeks") return new Date(y, m, d + interval * 7);
+    const total = m + interval;
+    const ny = y + Math.floor(total / 12);
+    const nm = ((total % 12) + 12) % 12;
+    const daysInMonth = new Date(ny, nm + 1, 0).getDate();
+    return new Date(ny, nm, Math.min(d, daysInMonth));
+  }
+
+  function recurrenceLabel(r) {
+    if (r.frequency === "weekly") return "Weekly";
+    if (r.frequency === "monthly") return "Monthly";
+    const unit = r.interval === 1 ? r.unit.replace(/s$/, "") : r.unit;
+    return `Every ${r.interval} ${unit}`;
+  }
+
+  function formatDateFull(dt) {
+    return dt.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  // The next occurrence strictly after today.
+  function nextDue(r) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let dt = parseDate(r.startDate);
+    let guard = 0;
+    while (dt <= today && guard < 5000) {
+      dt = addInterval(dt, r.interval, r.unit);
+      guard++;
+    }
+    return dt;
+  }
+
+  // Create concrete transactions for each recurring rule from its start date
+  // up to today. De-duped by (rule, date) so it is safe to run repeatedly.
+  function generateRecurringTransactions() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    let added = 0;
+    (state.recurring || []).forEach((r) => {
+      const existing = new Set(
+        state.transactions.filter((t) => t.recurringId === r.id).map((t) => t.date)
+      );
+      let dt = parseDate(r.startDate);
+      let guard = 0;
+      while (dt <= today && guard < 2000) {
+        const ds = fmtDateObj(dt);
+        if (!existing.has(ds)) {
+          state.transactions.push({
+            id: uid("tx"),
+            type: r.type,
+            amount: r.amount,
+            description: r.description,
+            categoryId: r.categoryId,
+            date: ds,
+            recurringId: r.id,
+          });
+          existing.add(ds);
+          added++;
+        }
+        dt = addInterval(dt, r.interval, r.unit);
+        guard++;
+      }
+    });
+    if (added) saveState();
+    return added;
+  }
+
   function monthLabel(key) {
     const [y, m] = key.split("-");
     return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, {
@@ -125,7 +225,44 @@
     renderDashboard();
     renderTransactions();
     renderBudgets();
+    renderRecurring();
     populateCategorySelects();
+  }
+
+  function renderRecurring() {
+    const list = $("#recurring-list");
+    const empty = $("#recurring-empty");
+    const rules = state.recurring || [];
+    if (!rules.length) {
+      list.innerHTML = "";
+      empty.hidden = false;
+      return;
+    }
+    empty.hidden = true;
+    list.innerHTML = rules
+      .map((r) => {
+        const cat = categoryById(r.categoryId);
+        const typeWord =
+          r.type === "income" ? "Income" : r.type === "investment" ? "Investment" : "Expense";
+        return `<div class="budget-card">
+          <div class="budget-card-head">
+            <div class="budget-card-title"><span class="cat-dot" style="background:${
+              cat ? cat.color : "#94a3b8"
+            }"></span>${escapeHtml(r.description)}</div>
+            <div class="row-actions">
+              <button class="icon-btn" data-edit-rec="${r.id}" title="Edit">✏️</button>
+              <button class="icon-btn" data-del-rec="${r.id}" title="Delete">🗑️</button>
+            </div>
+          </div>
+          <div class="spent"><span>${fmt(r.amount)} · ${typeWord}</span><span>${recurrenceLabel(
+          r
+        )}</span></div>
+          <div class="meta">${
+            cat ? escapeHtml(cat.name) : "Uncategorized"
+          } · Next: ${formatDateFull(nextDue(r))}</div>
+        </div>`;
+      })
+      .join("");
   }
 
   function renderDashboard() {
@@ -234,7 +371,9 @@
         : "amount-expense";
     return `<tr>
       <td>${formatDate(t.date)}</td>
-      <td>${escapeHtml(t.description)}</td>
+      <td>${escapeHtml(t.description)}${
+        t.recurringId ? `<span class="recur-badge" title="From a recurring item">🔁</span>` : ""
+      }</td>
       <td>${cat ? `<span class="cat-pill"><span class="cat-dot" style="background:${cat.color}"></span>${escapeHtml(cat.name)}</span>` : "—"}</td>
       <td class="num ${amtCls}">${sign}${fmt(t.amount)}</td>
       ${
@@ -346,6 +485,18 @@
         .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
         .join("");
     filterCat.value = prevFilter && [...filterCat.options].some((o) => o.value === prevFilter) ? prevFilter : "all";
+
+    // Recurring modal: same type-matched category list as the transaction form.
+    const recCat = $("#rec-category");
+    if (recCat) {
+      const recType = ($("input[name='rec-type']:checked") || {}).value || "expense";
+      const recRelevant = state.categories.filter((c) => catType(c) === recType);
+      const prevRec = recCat.value;
+      recCat.innerHTML = recRelevant
+        .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
+        .join("");
+      if (recRelevant.some((c) => c.id === prevRec)) recCat.value = prevRec;
+    }
   }
 
   // ---- Utilities ------------------------------------------------------------
@@ -404,6 +555,28 @@
     $("#cat-budget-field").style.display = type === "expense" ? "" : "none";
   }
 
+  function openRecModal(rule) {
+    $("#rec-modal-title").textContent = rule ? "Edit Recurring" : "Add Recurring";
+    $("#rec-id").value = rule ? rule.id : "";
+    const type = rule ? rule.type : "expense";
+    $(`input[name='rec-type'][value='${type}']`).checked = true;
+    $("#rec-amount").value = rule ? rule.amount : "";
+    $("#rec-description").value = rule ? rule.description : "";
+    $("#rec-frequency").value = rule ? rule.frequency : "monthly";
+    $("#rec-interval").value = rule ? rule.interval : 2;
+    $("#rec-unit").value = rule ? rule.unit : "weeks";
+    $("#rec-start").value = rule ? rule.startDate : todayStr();
+    populateCategorySelects();
+    if (rule) $("#rec-category").value = rule.categoryId;
+    updateRecCustomVisibility();
+    openModal("rec-modal");
+    $("#rec-amount").focus();
+  }
+
+  function updateRecCustomVisibility() {
+    $("#rec-custom-fields").hidden = $("#rec-frequency").value !== "custom";
+  }
+
   // ---- Event wiring ---------------------------------------------------------
 
   function init() {
@@ -442,6 +615,7 @@
     // add buttons
     $("#add-transaction-btn").addEventListener("click", () => openTxModal(null));
     $("#add-category-btn").addEventListener("click", () => openCatModal(null));
+    $("#add-recurring-btn").addEventListener("click", () => openRecModal(null));
 
     // type toggle re-populates category list
     $$("input[name='tx-type']").forEach((r) =>
@@ -453,23 +627,27 @@
       r.addEventListener("change", updateCatBudgetVisibility)
     );
 
-    // modal close buttons + backdrop click
-    $$("[data-close-modal]").forEach((b) =>
-      b.addEventListener("click", () => {
-        closeModal("tx-modal");
-        closeModal("cat-modal");
-      })
+    // recurring modal: type changes the category list; frequency shows custom fields
+    $$("input[name='rec-type']").forEach((r) =>
+      r.addEventListener("change", populateCategorySelects)
     );
+    $("#rec-frequency").addEventListener("change", updateRecCustomVisibility);
+
+    const closeAllModals = () => {
+      closeModal("tx-modal");
+      closeModal("cat-modal");
+      closeModal("rec-modal");
+    };
+
+    // modal close buttons + backdrop click
+    $$("[data-close-modal]").forEach((b) => b.addEventListener("click", closeAllModals));
     $$(".modal-backdrop").forEach((bd) =>
       bd.addEventListener("click", (e) => {
         if (e.target === bd) bd.hidden = true;
       })
     );
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        closeModal("tx-modal");
-        closeModal("cat-modal");
-      }
+      if (e.key === "Escape") closeAllModals();
     });
 
     // transaction form
@@ -521,12 +699,58 @@
       renderAll();
     });
 
+    // recurring form
+    $("#rec-form").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const id = $("#rec-id").value;
+      const frequency = $("#rec-frequency").value;
+      let interval = 1,
+        unit = "months";
+      if (frequency === "weekly") {
+        interval = 1;
+        unit = "weeks";
+      } else if (frequency === "monthly") {
+        interval = 1;
+        unit = "months";
+      } else {
+        interval = Math.max(1, parseInt($("#rec-interval").value, 10) || 1);
+        unit = $("#rec-unit").value;
+      }
+      const data = {
+        type: $("input[name='rec-type']:checked").value,
+        amount: parseFloat($("#rec-amount").value) || 0,
+        description: $("#rec-description").value.trim(),
+        categoryId: $("#rec-category").value,
+        frequency,
+        interval,
+        unit,
+        startDate: $("#rec-start").value,
+      };
+      if (data.amount <= 0) return toast("Amount must be greater than zero.");
+      if (!data.description) return toast("Add a description.");
+      if (!data.categoryId) return toast("Pick a category.");
+      if (!data.startDate) return toast("Pick a start date.");
+      if (id) {
+        Object.assign(state.recurring.find((x) => x.id === id), data);
+        toast("Recurring item updated.");
+      } else {
+        state.recurring.push({ id: uid("rec"), ...data });
+        toast("Recurring item added.");
+      }
+      saveState();
+      generateRecurringTransactions();
+      closeModal("rec-modal");
+      renderAll();
+    });
+
     // delegated clicks for edit/delete
     document.body.addEventListener("click", (e) => {
       const editTx = e.target.closest("[data-edit-tx]");
       const delTx = e.target.closest("[data-del-tx]");
       const editCat = e.target.closest("[data-edit-cat]");
       const delCat = e.target.closest("[data-del-cat]");
+      const editRec = e.target.closest("[data-edit-rec]");
+      const delRec = e.target.closest("[data-del-rec]");
 
       if (editTx) {
         const t = state.transactions.find((x) => x.id === editTx.dataset.editTx);
@@ -553,6 +777,22 @@
           renderAll();
           toast("Category deleted.");
         }
+      } else if (editRec) {
+        const r = state.recurring.find((x) => x.id === editRec.dataset.editRec);
+        if (r) openRecModal(r);
+      } else if (delRec) {
+        const id = delRec.dataset.delRec;
+        const count = state.transactions.filter((t) => t.recurringId === id).length;
+        if (
+          confirm(
+            `Delete this recurring item? The ${count} transaction(s) it already created will be kept.`
+          )
+        ) {
+          state.recurring = state.recurring.filter((r) => r.id !== id);
+          saveState();
+          renderAll();
+          toast("Recurring item deleted.");
+        }
       }
     });
 
@@ -571,6 +811,7 @@
       }
     });
 
+    generateRecurringTransactions();
     renderAll();
   }
 
@@ -622,9 +863,11 @@
           currency: parsed.currency || "USD",
           categories: parsed.categories,
           transactions: parsed.transactions,
+          recurring: parsed.recurring || [],
         };
         saveState();
         $("#currency-select").value = state.currency;
+        generateRecurringTransactions();
         renderAll();
         toast("Data imported.");
       } catch {

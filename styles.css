@@ -146,6 +146,11 @@ body {
 .amount-expense { color: var(--expense); font-weight: 600; }
 .amount-investment { color: var(--investment); font-weight: 600; }
 .cat-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.recur-badge { font-size: 12px; color: var(--text-dim); margin-left: 6px; }
+.budget-card .meta { font-size: 13px; color: var(--text-dim); margin-top: 6px; }
+.budget-card.paused { opacity: 0.55; }
+.budget-card .card-foot { display: flex; gap: 8px; margin-top: 12px; }
+.budget-card .card-foot .btn { padding: 6px 12px; font-size: 13px; }
 .cat-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 .row-actions { display: flex; gap: 6px; justify-content: flex-end; }
 .icon-btn { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 15px; padding: 4px 6px; border-radius: 6px; }
@@ -162,6 +167,8 @@ body {
 
 /* Forms / fields */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 13px; color: var(--text-dim); }
+.field-row { display: flex; gap: 12px; }
+.field-row .field { flex: 1; }
 input, select {
   background: var(--surface-2);
   border: 1px solid var(--border);
