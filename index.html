@@ -6,6 +6,7 @@
   <title>Budget — Personal Finance</title>
   <link rel="stylesheet" href="styles.css" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <div class="app">
@@ -231,8 +232,39 @@
         </div>
 
         <div class="card panel">
-          <h2>Backup &amp; Sync</h2>
-          <p class="muted">Your data stays private on this device. To sync between your phone and computer, keep one backup file in iCloud Drive (or Google Drive): <b>Back Up</b> on the device you just changed, then <b>Restore</b> on the other.</p>
+          <h2>Automatic Sync (Google Drive)</h2>
+          <p class="muted">Keeps every device in sync automatically through <b>your own</b> Google Drive — it loads your latest data when you open the app and saves quietly as you make changes. One-time setup below.</p>
+          <div class="sync-status">
+            <span>Status: <b id="gdrive-status">Not connected</b></span>
+            <span id="gdrive-synced-wrap" hidden>Last synced: <b id="gdrive-synced">never</b></span>
+          </div>
+          <label class="field" id="gdrive-cid-field">
+            <span>Google Client ID</span>
+            <input type="text" id="gdrive-cid" placeholder="1234-xxxx.apps.googleusercontent.com" autocomplete="off" spellcheck="false" />
+          </label>
+          <div class="button-row">
+            <button class="btn" id="gdrive-save-cid">Save ID</button>
+            <button class="btn primary" id="gdrive-connect">Connect Google Drive</button>
+            <button class="btn" id="gdrive-sync-now" hidden>Sync now</button>
+            <button class="btn" id="gdrive-disconnect" hidden>Disconnect</button>
+          </div>
+          <details class="sync-help">
+            <summary>One-time setup: get your Google Client ID (~10 min)</summary>
+            <ol>
+              <li>Go to <b>console.cloud.google.com</b> and create a project (any name).</li>
+              <li><b>APIs &amp; Services → Library</b>: search <b>Google Drive API</b> and click <b>Enable</b>.</li>
+              <li><b>APIs &amp; Services → OAuth consent screen</b>: choose <b>External</b>, enter an app name and your email, save. Under <b>Test users</b>, add your own Google email.</li>
+              <li><b>APIs &amp; Services → Credentials → Create Credentials → OAuth client ID</b>. Application type: <b>Web application</b>.</li>
+              <li>Under <b>Authorized JavaScript origins</b> add: <code>https://blaw25.github.io</code></li>
+              <li>Click <b>Create</b>, copy the <b>Client ID</b>, paste it above, tap <b>Save ID</b>, then <b>Connect Google Drive</b>.</li>
+            </ol>
+            <p class="muted">The Client ID isn't a secret. Your financial data is stored only in your own Google Drive (in a file named <code>budget-sync.json</code>); this app can't see any of your other Drive files.</p>
+          </details>
+        </div>
+
+        <div class="card panel">
+          <h2>Manual Backup</h2>
+          <p class="muted">Optional. A one-off backup file you can move yourself (iCloud Drive, AirDrop, email). Handy even if you use automatic sync above.</p>
           <div class="sync-status">
             <span>Last backup: <b id="last-backup">never</b></span>
             <span>Last restore: <b id="last-restore">never</b></span>

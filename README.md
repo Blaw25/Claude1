@@ -14,7 +14,8 @@ A clean, dependency-free personal budgeting app that runs entirely in your brows
 - **Monthly periods** — pick any month to view that period's transactions, totals, and budget progress.
 - **Categories** — fully customizable with names, colors, and budget limits.
 - **Multi-currency** — choose from common currency symbols.
-- **Backup & sync** — your data stays private on the device. Use **Settings → Back Up** to save a backup file (on a phone this opens the share sheet, so you can Save to **Google Drive**/iCloud Drive or AirDrop it), and **Restore from File** on another device to load it. "Last backup / last restore" timestamps show how fresh each device is. Export to CSV for spreadsheets too.
+- **Automatic Google Drive sync** — optional one-time setup that keeps every device in sync through **your own** Google Drive: the app loads your latest data on open and saves quietly as you edit. Runs entirely in your browser via Google sign-in and the `drive.file` scope, so it can only touch the single `budget-sync.json` file it creates — your other Drive files stay private, and nothing goes to any third-party server. Conflicts resolve by most-recently-edited (last write wins).
+- **Manual backup** — your data stays on the device by default. **Settings → Back Up** saves a backup file (on a phone this opens the share sheet, so you can Save to Google Drive/iCloud Drive or AirDrop it), and **Restore from File** loads it on another device. Export to CSV for spreadsheets too.
 - **Sample data** — one click loads realistic example data so you can explore before entering your own.
 
 The app opens on the **Calendar** as its home screen. On phones the navigation collapses into a **☰ menu** in the top bar that opens the full list of tabs (and the period picker); on wider screens the full sidebar is always visible.

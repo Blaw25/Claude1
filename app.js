@@ -46,6 +46,7 @@
       categories: DEFAULT_CATEGORIES.map((c, i) => ({ id: "cat-" + (i + 1), ...c })),
       transactions: [],
       recurring: [],
+      updatedAt: new Date().toISOString(),
     };
   }
 
@@ -58,14 +59,22 @@
       if (!parsed.categories || !parsed.transactions) return makeDefaultState();
       parsed.currency = parsed.currency || "USD";
       parsed.recurring = parsed.recurring || [];
+      // Treat existing local data as current so it isn't clobbered on first sync.
+      parsed.updatedAt = parsed.updatedAt || new Date().toISOString();
       return parsed;
     } catch {
       return makeDefaultState();
     }
   }
 
+  // When true, we're writing data pulled from Drive, so don't bump the
+  // timestamp or push it straight back up.
+  let applyingRemote = false;
+
   function saveState() {
+    if (!applyingRemote) state.updatedAt = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (!applyingRemote && typeof scheduleSync === "function") scheduleSync();
   }
 
   // ---- Helpers --------------------------------------------------------------
@@ -1293,7 +1302,19 @@
       }
     });
 
-    // settings: backup & sync
+    // settings: automatic Google Drive sync
+    $("#gdrive-save-cid").addEventListener("click", () => {
+      const val = $("#gdrive-cid").value.trim();
+      localStorage.setItem(GDRIVE_CID_KEY, val);
+      gdriveTokenClient = null; // re-init with the new client id
+      renderGdriveStatus();
+      toast(val ? "Client ID saved. Now tap Connect." : "Client ID cleared.");
+    });
+    $("#gdrive-connect").addEventListener("click", gdriveConnect);
+    $("#gdrive-sync-now").addEventListener("click", () => syncNow(true));
+    $("#gdrive-disconnect").addEventListener("click", gdriveDisconnect);
+
+    // settings: manual backup
     $("#backup-btn").addEventListener("click", backupData);
     $("#export-csv-btn").addEventListener("click", exportCsv);
     $("#import-btn").addEventListener("click", () => $("#import-file").click());
@@ -1311,6 +1332,7 @@
 
     generateRecurringTransactions();
     renderAll();
+    gdriveInit();
   }
 
   // ---- Import / export ------------------------------------------------------
@@ -1378,6 +1400,260 @@
     const r = $("#last-restore");
     if (b) b.textContent = relativeTime(localStorage.getItem(BACKUP_AT_KEY));
     if (r) r.textContent = relativeTime(localStorage.getItem(RESTORE_AT_KEY));
+  }
+
+  // ---- Google Drive auto-sync ----------------------------------------------
+  // Fully client-side: Google Identity Services for sign-in + the Drive REST
+  // API with the drive.file scope (this app can only see the one file it
+  // creates). Data lives in the user's own Drive; nothing touches our servers.
+
+  const GDRIVE_CID_KEY = "budget-gdrive-client-id";
+  const GDRIVE_CONNECTED_KEY = "budget-gdrive-connected";
+  const GDRIVE_SYNCED_AT_KEY = "budget-gdrive-synced-at";
+  const GDRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+  const GDRIVE_FILENAME = "budget-sync.json";
+
+  let gdriveTokenClient = null;
+  let gdriveToken = null; // { access_token, expiresAt }
+  let gdriveFileId = null;
+  let gdriveSyncing = false;
+  let syncTimer = null;
+  let pendingTokenResolve = null;
+  let pendingTokenReject = null;
+
+  const gdriveClientId = () => (localStorage.getItem(GDRIVE_CID_KEY) || "").trim();
+  const gdriveConnected = () => localStorage.getItem(GDRIVE_CONNECTED_KEY) === "1";
+
+  function gdriveReady() {
+    return typeof google !== "undefined" && google.accounts && google.accounts.oauth2;
+  }
+
+  function initTokenClient() {
+    if (gdriveTokenClient) return gdriveTokenClient;
+    if (!gdriveReady() || !gdriveClientId()) return null;
+    gdriveTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: gdriveClientId(),
+      scope: GDRIVE_SCOPE,
+      callback: (resp) => {
+        if (resp && resp.access_token) {
+          gdriveToken = {
+            access_token: resp.access_token,
+            expiresAt: Date.now() + (resp.expires_in ? resp.expires_in * 1000 : 3600000) - 60000,
+          };
+          if (pendingTokenResolve) pendingTokenResolve(gdriveToken.access_token);
+        } else if (pendingTokenReject) {
+          pendingTokenReject(new Error("No access token"));
+        }
+        pendingTokenResolve = pendingTokenReject = null;
+      },
+      error_callback: (err) => {
+        if (pendingTokenReject) pendingTokenReject(err);
+        pendingTokenResolve = pendingTokenReject = null;
+      },
+    });
+    return gdriveTokenClient;
+  }
+
+  function getAccessToken(interactive) {
+    return new Promise((resolve, reject) => {
+      if (gdriveToken && gdriveToken.expiresAt > Date.now()) return resolve(gdriveToken.access_token);
+      const client = initTokenClient();
+      if (!client) return reject(new Error("Google sign-in not ready"));
+      pendingTokenResolve = resolve;
+      pendingTokenReject = reject;
+      try {
+        client.requestAccessToken({ prompt: interactive ? "" : "none" });
+      } catch (e) {
+        pendingTokenResolve = pendingTokenReject = null;
+        reject(e);
+      }
+    });
+  }
+
+  async function driveFindFile(token) {
+    const q = encodeURIComponent(`name='${GDRIVE_FILENAME}' and trashed=false`);
+    const res = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id)`,
+      { headers: { Authorization: "Bearer " + token } }
+    );
+    if (!res.ok) throw new Error("Drive list " + res.status);
+    const data = await res.json();
+    return data.files && data.files[0] ? data.files[0].id : null;
+  }
+
+  async function driveDownload(token, id) {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${id}?alt=media`, {
+      headers: { Authorization: "Bearer " + token },
+    });
+    if (!res.ok) throw new Error("Drive download " + res.status);
+    return res.json();
+  }
+
+  async function driveUpload(token, id, contentObj) {
+    const body = JSON.stringify(contentObj);
+    if (id) {
+      const res = await fetch(
+        `https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media`,
+        { method: "PATCH", headers: { Authorization: "Bearer " + token, "Content-Type": "application/json" }, body }
+      );
+      if (!res.ok) throw new Error("Drive update " + res.status);
+      return id;
+    }
+    const boundary = "budgetsync" + Date.now();
+    const metadata = { name: GDRIVE_FILENAME, mimeType: "application/json" };
+    const multipart =
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n` +
+      `--${boundary}\r\nContent-Type: application/json\r\n\r\n${body}\r\n--${boundary}--`;
+    const res = await fetch(
+      `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id`,
+      {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token, "Content-Type": `multipart/related; boundary=${boundary}` },
+        body: multipart,
+      }
+    );
+    if (!res.ok) throw new Error("Drive create " + res.status);
+    return (await res.json()).id;
+  }
+
+  function chooseNewer(localState, remoteState) {
+    const lt = Date.parse(localState.updatedAt || 0) || 0;
+    const rt = Date.parse(remoteState.updatedAt || 0) || 0;
+    if (rt > lt) return "remote";
+    if (lt > rt) return "local";
+    const rTx = (remoteState.transactions || []).length;
+    const lTx = (localState.transactions || []).length;
+    return rTx > lTx ? "remote" : "local";
+  }
+
+  function applyRemoteState(remote) {
+    applyingRemote = true;
+    state = {
+      currency: remote.currency || "USD",
+      categories: remote.categories || [],
+      transactions: remote.transactions || [],
+      recurring: remote.recurring || [],
+      updatedAt: remote.updatedAt || new Date().toISOString(),
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    applyingRemote = false;
+    $("#currency-select").value = state.currency;
+    generateRecurringTransactions();
+    renderAll();
+  }
+
+  // Pull remote, reconcile by newest, push if local wins. interactive=true may
+  // show the Google sign-in popup; false stays silent (for background syncs).
+  async function syncNow(interactive) {
+    if (!gdriveClientId() || gdriveSyncing) return;
+    gdriveSyncing = true;
+    setGdriveStatus("Syncing…");
+    try {
+      const token = await getAccessToken(interactive);
+      if (!gdriveFileId) gdriveFileId = await driveFindFile(token);
+      let remote = null;
+      if (gdriveFileId) {
+        try {
+          remote = await driveDownload(token, gdriveFileId);
+        } catch {}
+      }
+      if (remote && remote.categories && remote.transactions) {
+        if (chooseNewer(state, remote) === "remote") applyRemoteState(remote);
+        else gdriveFileId = await driveUpload(token, gdriveFileId, state);
+      } else {
+        gdriveFileId = await driveUpload(token, gdriveFileId, state);
+      }
+      localStorage.setItem(GDRIVE_CONNECTED_KEY, "1");
+      localStorage.setItem(GDRIVE_SYNCED_AT_KEY, new Date().toISOString());
+      setGdriveStatus("Connected");
+    } catch (e) {
+      setGdriveStatus(gdriveConnected() ? "Reconnect needed" : "Not connected");
+      if (interactive) toast("Google Drive: " + (e.message || "sign-in failed"));
+    } finally {
+      gdriveSyncing = false;
+      renderGdriveStatus();
+    }
+  }
+
+  // Debounced background upload after local edits.
+  function scheduleSync() {
+    if (!gdriveConnected() || !gdriveClientId()) return;
+    clearTimeout(syncTimer);
+    syncTimer = setTimeout(pushLocalQuietly, 2000);
+  }
+
+  async function pushLocalQuietly() {
+    if (!gdriveConnected() || gdriveSyncing) return;
+    try {
+      const token = await getAccessToken(false);
+      if (!gdriveFileId) gdriveFileId = await driveFindFile(token);
+      gdriveFileId = await driveUpload(token, gdriveFileId, state);
+      localStorage.setItem(GDRIVE_SYNCED_AT_KEY, new Date().toISOString());
+      setGdriveStatus("Connected");
+    } catch {
+      setGdriveStatus("Reconnect needed");
+    }
+    renderGdriveStatus();
+  }
+
+  function gdriveConnect() {
+    if (!gdriveClientId()) return toast("Paste your Google Client ID and tap Save ID first.");
+    if (!gdriveReady()) return toast("Google sign-in is still loading — try again in a moment.");
+    syncNow(true);
+  }
+
+  function gdriveDisconnect() {
+    const tok = gdriveToken && gdriveToken.access_token;
+    if (tok && gdriveReady() && google.accounts.oauth2.revoke) {
+      try {
+        google.accounts.oauth2.revoke(tok);
+      } catch {}
+    }
+    gdriveToken = null;
+    gdriveFileId = null;
+    localStorage.removeItem(GDRIVE_CONNECTED_KEY);
+    setGdriveStatus("Not connected");
+    renderGdriveStatus();
+    toast("Disconnected from Google Drive.");
+  }
+
+  function setGdriveStatus(text) {
+    const el = $("#gdrive-status");
+    if (el) el.textContent = text;
+  }
+
+  function renderGdriveStatus() {
+    const connected = gdriveConnected();
+    const cid = gdriveClientId();
+    const cidInput = $("#gdrive-cid");
+    if (cidInput && document.activeElement !== cidInput) cidInput.value = cid;
+    $("#gdrive-connect").hidden = connected;
+    $("#gdrive-sync-now").hidden = !connected;
+    $("#gdrive-disconnect").hidden = !connected;
+    const syncedWrap = $("#gdrive-synced-wrap");
+    if (syncedWrap) {
+      syncedWrap.hidden = !connected;
+      $("#gdrive-synced").textContent = relativeTime(localStorage.getItem(GDRIVE_SYNCED_AT_KEY));
+    }
+  }
+
+  function waitForGoogle(cb, tries) {
+    tries = tries || 0;
+    if (gdriveReady()) return cb();
+    if (tries > 40) return; // ~10s
+    setTimeout(() => waitForGoogle(cb, tries + 1), 250);
+  }
+
+  function gdriveInit() {
+    renderGdriveStatus();
+    if (gdriveConnected() && gdriveClientId()) {
+      setGdriveStatus("Connecting…");
+      waitForGoogle(() => syncNow(false));
+    }
+    // Pull latest when returning to the app (e.g. after editing another device)
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden && gdriveConnected()) syncNow(false);
+    });
   }
 
   function exportCsv() {
