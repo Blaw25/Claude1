@@ -1293,11 +1293,12 @@
       }
     });
 
-    // settings: data management
-    $("#export-json-btn").addEventListener("click", exportJson);
+    // settings: backup & sync
+    $("#backup-btn").addEventListener("click", backupData);
     $("#export-csv-btn").addEventListener("click", exportCsv);
     $("#import-btn").addEventListener("click", () => $("#import-file").click());
     $("#import-file").addEventListener("change", importJson);
+    renderSyncStatus();
     $("#seed-btn").addEventListener("click", seedSampleData);
     $("#clear-btn").addEventListener("click", () => {
       if (confirm("This erases all transactions and categories. Continue?")) {
@@ -1324,9 +1325,59 @@
     URL.revokeObjectURL(url);
   }
 
-  function exportJson() {
-    download("budget-data.json", JSON.stringify(state, null, 2), "application/json");
-    toast("Exported JSON.");
+  const BACKUP_FILENAME = "budget-backup.json";
+  const BACKUP_AT_KEY = "budget-backup-at";
+  const RESTORE_AT_KEY = "budget-restore-at";
+
+  // Back up via the native share sheet when available (iOS/Android: lets you
+  // pick "Save to Files → Google Drive/iCloud" or AirDrop), else download.
+  async function backupData() {
+    const json = JSON.stringify(state, null, 2);
+    if (navigator.canShare) {
+      try {
+        const file = new File([json], BACKUP_FILENAME, { type: "application/json" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "Budget backup" });
+          markBackup();
+          return;
+        }
+      } catch (err) {
+        if (err && err.name === "AbortError") return; // user cancelled the share sheet
+        // otherwise fall through to a normal download
+      }
+    }
+    download(BACKUP_FILENAME, json, "application/json");
+    markBackup();
+  }
+
+  function markBackup() {
+    localStorage.setItem(BACKUP_AT_KEY, new Date().toISOString());
+    renderSyncStatus();
+    toast("Backed up. Save it to Google Drive to sync.");
+  }
+  function markRestore() {
+    localStorage.setItem(RESTORE_AT_KEY, new Date().toISOString());
+    renderSyncStatus();
+  }
+
+  function relativeTime(iso) {
+    if (!iso) return "never";
+    const then = new Date(iso);
+    const mins = Math.round((Date.now() - then.getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs} hr ago`;
+    const days = Math.round(hrs / 24);
+    if (days < 7) return `${days} day${days > 1 ? "s" : ""} ago`;
+    return then.toLocaleDateString();
+  }
+
+  function renderSyncStatus() {
+    const b = $("#last-backup");
+    const r = $("#last-restore");
+    if (b) b.textContent = relativeTime(localStorage.getItem(BACKUP_AT_KEY));
+    if (r) r.textContent = relativeTime(localStorage.getItem(RESTORE_AT_KEY));
   }
 
   function exportCsv() {
@@ -1356,6 +1407,18 @@
       try {
         const parsed = JSON.parse(reader.result);
         if (!parsed.categories || !parsed.transactions) throw new Error("bad shape");
+        const txN = parsed.transactions.length;
+        const catN = parsed.categories.length;
+        if (
+          !confirm(
+            `Restore this backup?\n\nIt contains ${txN} transaction${txN === 1 ? "" : "s"} and ${catN} categor${
+              catN === 1 ? "y" : "ies"
+            }, and will replace everything currently on this device.`
+          )
+        ) {
+          e.target.value = "";
+          return;
+        }
         state = {
           currency: parsed.currency || "USD",
           categories: parsed.categories,
@@ -1363,12 +1426,13 @@
           recurring: parsed.recurring || [],
         };
         saveState();
+        markRestore();
         $("#currency-select").value = state.currency;
         generateRecurringTransactions();
         renderAll();
-        toast("Data imported.");
+        toast("Restored from backup.");
       } catch {
-        toast("Could not import: invalid file.");
+        toast("Could not restore: not a valid backup file.");
       }
     };
     reader.readAsText(file);

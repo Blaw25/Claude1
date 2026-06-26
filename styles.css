@@ -412,6 +412,15 @@ input[type="color"] { padding: 4px; height: 42px; cursor: pointer; }
 
 .muted { color: var(--text-dim); font-size: 14px; }
 
+/* Backup & sync */
+.sync-status { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--text-dim); margin: 6px 0 14px; }
+.sync-status b { color: var(--text); font-weight: 600; }
+.sync-help { margin-top: 16px; font-size: 14px; }
+.sync-help summary { cursor: pointer; color: var(--primary); }
+.sync-help ol { margin: 12px 0; padding-left: 20px; color: var(--text-dim); }
+.sync-help li { margin-bottom: 6px; }
+.sync-help b { color: var(--text); }
+
 /* Toast */
 .toast {
   position: fixed;

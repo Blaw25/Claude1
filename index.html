@@ -231,15 +231,32 @@
         </div>
 
         <div class="card panel">
-          <h2>Data</h2>
-          <p class="muted">Your data is stored locally in this browser. Export it to keep a backup or move it to another device.</p>
-          <div class="button-row">
-            <button class="btn" id="export-json-btn">Export JSON</button>
-            <button class="btn" id="export-csv-btn">Export CSV</button>
-            <button class="btn" id="import-btn">Import JSON</button>
-            <input type="file" id="import-file" accept="application/json" hidden />
+          <h2>Backup &amp; Sync</h2>
+          <p class="muted">Your data stays private on this device. To sync between your phone and computer, keep one backup file in iCloud Drive (or Google Drive): <b>Back Up</b> on the device you just changed, then <b>Restore</b> on the other.</p>
+          <div class="sync-status">
+            <span>Last backup: <b id="last-backup">never</b></span>
+            <span>Last restore: <b id="last-restore">never</b></span>
           </div>
           <div class="button-row">
+            <button class="btn primary" id="backup-btn">⬆️ Back Up</button>
+            <button class="btn" id="import-btn">⬇️ Restore from File</button>
+            <input type="file" id="import-file" accept="application/json,.json" hidden />
+          </div>
+          <details class="sync-help">
+            <summary>How to sync with iPhone + computer</summary>
+            <ol>
+              <li><b>On the device you just edited</b>, tap <b>Back Up</b>.</li>
+              <li>Choose <b>Save to Files → iCloud Drive</b> (pick the same folder each time), or <b>AirDrop</b> it straight to your Mac.</li>
+              <li><b>On the other device</b>, open this app and tap <b>Restore from File</b>, then pick that file.</li>
+            </ol>
+            <p class="muted">Tip: always Back Up after making changes, and Restore before viewing on the other device, so you don't overwrite newer data.</p>
+          </details>
+        </div>
+
+        <div class="card panel">
+          <h2>Other</h2>
+          <div class="button-row">
+            <button class="btn" id="export-csv-btn">Export CSV (spreadsheet)</button>
             <button class="btn" id="seed-btn">Load Sample Data</button>
             <button class="btn danger" id="clear-btn">Clear All Data</button>
           </div>
