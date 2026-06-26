@@ -1517,12 +1517,16 @@
   }
 
   function chooseNewer(localState, remoteState) {
+    const lTx = (localState.transactions || []).length;
+    const rTx = (remoteState.transactions || []).length;
+    // A fresh/empty device must adopt populated data rather than overwrite it,
+    // regardless of timestamps (protects against wiping data on first connect).
+    if (lTx === 0 && rTx > 0) return "remote";
+    if (rTx === 0 && lTx > 0) return "local";
     const lt = Date.parse(localState.updatedAt || 0) || 0;
     const rt = Date.parse(remoteState.updatedAt || 0) || 0;
     if (rt > lt) return "remote";
     if (lt > rt) return "local";
-    const rTx = (remoteState.transactions || []).length;
-    const lTx = (localState.transactions || []).length;
     return rTx > lTx ? "remote" : "local";
   }
 
