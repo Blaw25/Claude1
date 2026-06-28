@@ -24,6 +24,10 @@ body {
   color: var(--text);
   font-size: 15px;
   line-height: 1.5;
+  /* Safety net: never let any view shift the page sideways. "clip" doesn't
+     create a scroll container, so the sticky mobile header keeps working. */
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 .app {
