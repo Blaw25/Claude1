@@ -1234,7 +1234,31 @@
       if (!data.categoryId) return toast("Pick a category.");
       if (!data.startDate) return toast("Pick a start date.");
       if (id) {
-        Object.assign(state.recurring.find((x) => x.id === id), data);
+        const rule = state.recurring.find((x) => x.id === id);
+        const detailsChanged =
+          rule.amount !== data.amount ||
+          rule.description !== data.description ||
+          rule.categoryId !== data.categoryId ||
+          rule.type !== data.type;
+        Object.assign(rule, data);
+        // Already-created transactions keep their old values unless the user
+        // opts in — e.g. fixing a wrong rent amount should fix past months too.
+        const existing = state.transactions.filter((t) => t.recurringId === id);
+        if (detailsChanged && existing.length) {
+          const applyPast = confirm(
+            `Also update the ${existing.length} transaction${
+              existing.length === 1 ? "" : "s"
+            } already created by this item (e.g. on the calendar)?\n\nOK = update them to the new details\nCancel = keep them as they are (changes apply to future ones only)`
+          );
+          if (applyPast) {
+            existing.forEach((t) => {
+              t.amount = data.amount;
+              t.description = data.description;
+              t.categoryId = data.categoryId;
+              t.type = data.type;
+            });
+          }
+        }
         toast("Recurring item updated.");
       } else {
         state.recurring.push({ id: uid("rec"), ...data });

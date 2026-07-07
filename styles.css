@@ -344,6 +344,7 @@ body {
 /* Forms / fields */
 .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; font-size: 13px; color: var(--text-dim); }
 .field-row { display: flex; gap: 12px; }
+.field-row[hidden] { display: none; }
 .field-row .field { flex: 1; }
 input, select {
   background: var(--surface-2);
