@@ -336,6 +336,22 @@ body {
 
 /* Budgets list */
 .budgets-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; margin-top: 20px; }
+.group-heading {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  margin: 10px 0 -6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.group-heading:first-child { margin-top: 0; }
+.group-total { font-weight: 500; text-transform: none; letter-spacing: 0; }
 .budget-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 18px; }
 .budget-card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .budget-card-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }

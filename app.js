@@ -269,30 +269,49 @@
       return;
     }
     empty.hidden = true;
-    list.innerHTML = rules
-      .map((r) => {
-        const cat = categoryById(r.categoryId);
-        const typeWord =
-          r.type === "income" ? "Income" : r.type === "investment" ? "Investment" : "Expense";
-        return `<div class="budget-card">
-          <div class="budget-card-head">
-            <div class="budget-card-title"><span class="cat-dot" style="background:${
-              cat ? cat.color : "#94a3b8"
-            }"></span>${escapeHtml(r.description)}</div>
-            <div class="row-actions">
-              <button class="icon-btn" data-edit-rec="${r.id}" title="Edit">✏️</button>
-              <button class="icon-btn" data-del-rec="${r.id}" title="Delete">🗑️</button>
-            </div>
+
+    const cardHtml = (r) => {
+      const cat = categoryById(r.categoryId);
+      return `<div class="budget-card">
+        <div class="budget-card-head">
+          <div class="budget-card-title"><span class="cat-dot" style="background:${
+            cat ? cat.color : "#94a3b8"
+          }"></span>${escapeHtml(r.description)}</div>
+          <div class="row-actions">
+            <button class="icon-btn" data-edit-rec="${r.id}" title="Edit">✏️</button>
+            <button class="icon-btn" data-del-rec="${r.id}" title="Delete">🗑️</button>
           </div>
-          <div class="spent"><span>${fmt(r.amount)} · ${typeWord}</span><span>${recurrenceLabel(
-          r
-        )}</span></div>
-          <div class="meta">${
-            cat ? escapeHtml(cat.name) : "Uncategorized"
-          } · Next: ${formatDateFull(nextDue(r))}</div>
-        </div>`;
+        </div>
+        <div class="spent"><span>${fmt(r.amount)}</span><span>${recurrenceLabel(r)}</span></div>
+        <div class="meta">${
+          cat ? escapeHtml(cat.name) : "Uncategorized"
+        } · Next: ${formatDateFull(nextDue(r))}</div>
+      </div>`;
+    };
+
+    const groups = [
+      ["expense", "Expenses"],
+      ["income", "Income"],
+      ["investment", "Investments"],
+    ];
+    list.innerHTML = groups
+      .map(([type, label]) => {
+        const items = rules.filter((r) => (r.type || "expense") === type);
+        if (!items.length) return "";
+        const monthly = items.reduce((s, r) => s + monthlyEquivalent(r), 0);
+        return (
+          `<div class="group-heading">${label}<span class="group-total">≈ ${fmt(
+            monthly
+          )}/mo</span></div>` + items.map(cardHtml).join("")
+        );
       })
       .join("");
+  }
+
+  // Rough per-month cost of a rule, for the group totals.
+  function monthlyEquivalent(r) {
+    const perDay = { days: 1, weeks: 7, months: 30.44 }[r.unit] * r.interval;
+    return r.amount * (30.44 / perDay);
   }
 
   function renderDashboard() {
@@ -928,9 +947,9 @@
     // transaction type (expense / income / investment).
     const relevant = state.categories.filter((c) => catType(c) === selectedType);
     const prev = txCat.value;
-    txCat.innerHTML = relevant
-      .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
-      .join("");
+    txCat.innerHTML =
+      relevant.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("") +
+      `<option value="__new__">＋ New category…</option>`;
     if (relevant.some((c) => c.id === prev)) txCat.value = prev;
 
     const prevFilter = filterCat.value;
@@ -947,9 +966,9 @@
       const recType = ($("input[name='rec-type']:checked") || {}).value || "expense";
       const recRelevant = state.categories.filter((c) => catType(c) === recType);
       const prevRec = recCat.value;
-      recCat.innerHTML = recRelevant
-        .map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`)
-        .join("");
+      recCat.innerHTML =
+        recRelevant.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join("") +
+        `<option value="__new__">＋ New category…</option>`;
       if (recRelevant.some((c) => c.id === prevRec)) recCat.value = prevRec;
     }
   }
@@ -990,10 +1009,15 @@
     $("#tx-amount").focus();
   }
 
-  function openCatModal(cat) {
+  // Which category select (if any) asked to create a new category inline,
+  // so we can auto-select the result: "tx" | "rec" | null.
+  let newCatTarget = null;
+
+  function openCatModal(cat, presetType) {
+    newCatTarget = null;
     $("#cat-modal-title").textContent = cat ? "Edit Category" : "Add Category";
     $("#cat-id").value = cat ? cat.id : "";
-    const type = cat ? catType(cat) : "expense";
+    const type = cat ? catType(cat) : presetType || "expense";
     $(`input[name='cat-type'][value='${type}']`).checked = true;
     $("#cat-name").value = cat ? cat.name : "";
     $("#cat-budget").value = cat ? cat.budget : 0;
@@ -1135,23 +1159,47 @@
     );
     $("#rec-frequency").addEventListener("change", updateRecCustomVisibility);
 
-    const closeAllModals = () => {
-      closeModal("tx-modal");
-      closeModal("cat-modal");
-      closeModal("rec-modal");
-      closeModal("day-modal");
-    };
-
-    // modal close buttons + backdrop click
-    $$("[data-close-modal]").forEach((b) => b.addEventListener("click", closeAllModals));
+    // Close only the button's own modal, so e.g. cancelling the inline
+    // "new category" dialog doesn't also close the transaction form under it.
+    $$("[data-close-modal]").forEach((b) =>
+      b.addEventListener("click", () => {
+        const bd = b.closest(".modal-backdrop");
+        if (bd) bd.hidden = true;
+      })
+    );
     $$(".modal-backdrop").forEach((bd) =>
       bd.addEventListener("click", (e) => {
         if (e.target === bd) bd.hidden = true;
       })
     );
+    // Escape closes just the topmost open modal (last in DOM paints on top).
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") closeAllModals();
+      if (e.key === "Escape") {
+        const open = $$(".modal-backdrop").filter((m) => !m.hidden);
+        if (open.length) open[open.length - 1].hidden = true;
+      }
     });
+
+    // "+ New category…" inside the category dropdowns opens the category
+    // creator preset to the matching type, then auto-selects the result.
+    const wireInlineNewCategory = (selectSel, target, typeGetter) => {
+      $(selectSel).addEventListener("change", (e) => {
+        if (e.target.value !== "__new__") return;
+        e.target.selectedIndex = 0;
+        openCatModal(null, typeGetter());
+        newCatTarget = target;
+      });
+    };
+    wireInlineNewCategory(
+      "#tx-category",
+      "tx",
+      () => ($("input[name='tx-type']:checked") || {}).value || "expense"
+    );
+    wireInlineNewCategory(
+      "#rec-category",
+      "rec",
+      () => ($("input[name='rec-type']:checked") || {}).value || "expense"
+    );
 
     // transaction form
     $("#tx-form").addEventListener("submit", (e) => {
@@ -1165,6 +1213,8 @@
         date: $("#tx-date").value,
       };
       if (data.amount <= 0) return toast("Amount must be greater than zero.");
+      if (!data.categoryId || data.categoryId === "__new__")
+        return toast("Pick a category (or create one with ＋ New category).");
       if (id) {
         const t = state.transactions.find((x) => x.id === id);
         Object.assign(t, data);
@@ -1190,16 +1240,24 @@
         type,
       };
       if (!data.name) return toast("Category needs a name.");
+      let newId = null;
       if (id) {
         Object.assign(categoryById(id), data);
         toast("Category updated.");
       } else {
-        state.categories.push({ id: uid("cat"), ...data });
+        newId = uid("cat");
+        state.categories.push({ id: newId, ...data });
         toast("Category added.");
       }
       saveState();
       closeModal("cat-modal");
       renderAll();
+      // If this came from "+ New category…" in a form, select it there.
+      if (newId && newCatTarget) {
+        const sel = $(newCatTarget === "rec" ? "#rec-category" : "#tx-category");
+        if ([...sel.options].some((o) => o.value === newId)) sel.value = newId;
+      }
+      newCatTarget = null;
     });
 
     // recurring form
@@ -1231,7 +1289,8 @@
       };
       if (data.amount <= 0) return toast("Amount must be greater than zero.");
       if (!data.description) return toast("Add a description.");
-      if (!data.categoryId) return toast("Pick a category.");
+      if (!data.categoryId || data.categoryId === "__new__")
+        return toast("Pick a category (or create one with ＋ New category).");
       if (!data.startDate) return toast("Pick a start date.");
       if (id) {
         const rule = state.recurring.find((x) => x.id === id);
