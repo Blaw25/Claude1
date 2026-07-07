@@ -294,15 +294,43 @@
       ["income", "Income"],
       ["investment", "Investments"],
     ];
+    const monthlySum = (items) => items.reduce((s, r) => s + monthlyEquivalent(r), 0);
+
     list.innerHTML = groups
       .map(([type, label]) => {
         const items = rules.filter((r) => (r.type || "expense") === type);
         if (!items.length) return "";
-        const monthly = items.reduce((s, r) => s + monthlyEquivalent(r), 0);
+        let body;
+        if (type === "expense") {
+          // Break expenses down by category, largest monthly cost first.
+          const byCat = {};
+          items.forEach((r) => (byCat[r.categoryId] = byCat[r.categoryId] || []).push(r));
+          body = Object.entries(byCat)
+            .map(([cid, catItems]) => ({
+              cat: categoryById(cid),
+              catItems,
+              monthly: monthlySum(catItems),
+            }))
+            .sort((a, b) => b.monthly - a.monthly)
+            .map(
+              (g) =>
+                `<div class="subgroup-heading"><span>${
+                  g.cat
+                    ? `<span class="cat-dot" style="background:${g.cat.color}"></span>${escapeHtml(
+                        g.cat.name
+                      )}`
+                    : "Uncategorized"
+                }</span><span>≈ ${fmt(g.monthly)}/mo</span></div>` +
+                g.catItems.map(cardHtml).join("")
+            )
+            .join("");
+        } else {
+          body = items.map(cardHtml).join("");
+        }
         return (
           `<div class="group-heading">${label}<span class="group-total">≈ ${fmt(
-            monthly
-          )}/mo</span></div>` + items.map(cardHtml).join("")
+            monthlySum(items)
+          )}/mo</span></div>` + body
         );
       })
       .join("");
@@ -880,51 +908,8 @@
       empty.hidden = false;
     } else {
       empty.hidden = true;
-      tbody.innerHTML = groupedTxRows(tx);
+      tbody.innerHTML = tx.map((t) => txRowHtml(t, true)).join("");
     }
-  }
-
-  // Transactions grouped by type, and expenses further by category, with
-  // section totals. Rows stay date-sorted within each group.
-  function groupedTxRows(tx) {
-    const byDateDesc = (a, b) => b.date.localeCompare(a.date);
-    const sum = (list) => list.reduce((s, t) => s + t.amount, 0);
-    const headRow = (cls, label, total) =>
-      `<tr class="${cls}"><td colspan="5"><div class="grp"><span>${label}</span><span>${fmt(
-        total
-      )}</span></div></td></tr>`;
-
-    let html = "";
-    [
-      ["expense", "Expenses"],
-      ["income", "Income"],
-      ["investment", "Investments"],
-    ].forEach(([type, label]) => {
-      const items = tx.filter((t) => t.type === type);
-      if (!items.length) return;
-      html += headRow("tx-group-row", label, sum(items));
-      if (type === "expense") {
-        const byCat = {};
-        items.forEach((t) => (byCat[t.categoryId] = byCat[t.categoryId] || []).push(t));
-        Object.entries(byCat)
-          .map(([cid, list]) => ({ cat: categoryById(cid), list, total: sum(list) }))
-          .sort((a, b) => b.total - a.total)
-          .forEach((g) => {
-            const dot = g.cat
-              ? `<span class="cat-dot" style="background:${g.cat.color}"></span> `
-              : "";
-            html += headRow(
-              "tx-subgroup-row",
-              dot + (g.cat ? escapeHtml(g.cat.name) : "Uncategorized"),
-              g.total
-            );
-            html += g.list.sort(byDateDesc).map((t) => txRowHtml(t, true)).join("");
-          });
-      } else {
-        html += items.sort(byDateDesc).map((t) => txRowHtml(t, true)).join("");
-      }
-    });
-    return html;
   }
 
   function renderBudgets() {
