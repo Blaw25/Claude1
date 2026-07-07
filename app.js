@@ -880,8 +880,51 @@
       empty.hidden = false;
     } else {
       empty.hidden = true;
-      tbody.innerHTML = tx.map((t) => txRowHtml(t, true)).join("");
+      tbody.innerHTML = groupedTxRows(tx);
     }
+  }
+
+  // Transactions grouped by type, and expenses further by category, with
+  // section totals. Rows stay date-sorted within each group.
+  function groupedTxRows(tx) {
+    const byDateDesc = (a, b) => b.date.localeCompare(a.date);
+    const sum = (list) => list.reduce((s, t) => s + t.amount, 0);
+    const headRow = (cls, label, total) =>
+      `<tr class="${cls}"><td colspan="5"><div class="grp"><span>${label}</span><span>${fmt(
+        total
+      )}</span></div></td></tr>`;
+
+    let html = "";
+    [
+      ["expense", "Expenses"],
+      ["income", "Income"],
+      ["investment", "Investments"],
+    ].forEach(([type, label]) => {
+      const items = tx.filter((t) => t.type === type);
+      if (!items.length) return;
+      html += headRow("tx-group-row", label, sum(items));
+      if (type === "expense") {
+        const byCat = {};
+        items.forEach((t) => (byCat[t.categoryId] = byCat[t.categoryId] || []).push(t));
+        Object.entries(byCat)
+          .map(([cid, list]) => ({ cat: categoryById(cid), list, total: sum(list) }))
+          .sort((a, b) => b.total - a.total)
+          .forEach((g) => {
+            const dot = g.cat
+              ? `<span class="cat-dot" style="background:${g.cat.color}"></span> `
+              : "";
+            html += headRow(
+              "tx-subgroup-row",
+              dot + (g.cat ? escapeHtml(g.cat.name) : "Uncategorized"),
+              g.total
+            );
+            html += g.list.sort(byDateDesc).map((t) => txRowHtml(t, true)).join("");
+          });
+      } else {
+        html += items.sort(byDateDesc).map((t) => txRowHtml(t, true)).join("");
+      }
+    });
+    return html;
   }
 
   function renderBudgets() {
